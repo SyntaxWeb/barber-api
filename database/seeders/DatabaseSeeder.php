@@ -12,11 +12,26 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // \App\Models\User::factory(10)->create();
+        $user = \App\Models\User::firstOrCreate(
+            ['email' => 'carlos@barbeariavintage.com'],
+            [
+                'name' => 'Carlos Vintage',
+                'password' => bcrypt('password'),
+            ]
+        );
 
-        // \App\Models\User::factory()->create([
-        //     'name' => 'Test User',
-        //     'email' => 'test@example.com',
-        // ]);
+        \App\Models\Setting::firstOrCreate([], [
+            'horario_inicio' => '09:00',
+            'horario_fim' => '19:00',
+            'intervalo_minutos' => 30,
+        ]);
+
+        \App\Models\Service::insertOrIgnore([
+            ['nome' => 'Corte Máquina', 'preco' => 35, 'duracao_minutos' => 30, 'created_at' => now(), 'updated_at' => now()],
+            ['nome' => 'Corte Tesoura', 'preco' => 45, 'duracao_minutos' => 45, 'created_at' => now(), 'updated_at' => now()],
+            ['nome' => 'Corte Degradê', 'preco' => 40, 'duracao_minutos' => 40, 'created_at' => now(), 'updated_at' => now()],
+            ['nome' => 'Barba Completa', 'preco' => 30, 'duracao_minutos' => 30, 'created_at' => now(), 'updated_at' => now()],
+            ['nome' => 'Combo Corte + Barba', 'preco' => 55, 'duracao_minutos' => 60, 'created_at' => now(), 'updated_at' => now()],
+        ]);
     }
 }
