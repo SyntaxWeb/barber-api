@@ -1,17 +1,21 @@
-version: '3.8'
-
 services:
   app:
-    container_name: laravel_app
+    container_name: laravel_app_barber
     build:
       context: .
       dockerfile: Dockerfile
     volumes:
       - ./:/var/www
     networks:
-      - estoque_default
-    depends_on:
-      - mysql_existing
+      - apolonet
+    environment:
+      DB_CONNECTION: mysql
+      DB_HOST: mysql_db
+      DB_PORT: 3306
+      DB_DATABASE: barber
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    
 
   nginx:
     container_name: laravel_nginx
@@ -22,20 +26,10 @@ services:
       - ./:/var/www
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
     networks:
-      - estoque_default
+      - apolonet
     depends_on:
       - app
 
-  # Alias para acessar o MySQL existente
-  mysql_existing:
-    image: mysql:8.0
-    container_name: mysql_alias_only
-    networks:
-      - estoque_default
-    external_links:
-      - mysql_db:mysql_db
-    command: ["true"] # não roda MySQL, apenas "representa" o link
-
 networks:
-  estoque_default:
+  apolonet:
     external: true
