@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,8 +22,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'Credenciais inválidas'], 401);
         }
 
-        $user = $request->user();
-        $token = $user->createToken('auth_token')->plainTextToken;
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        if ($user->role !== 'provider') {
+            Auth::logout();
+            return response()->json(['message' => 'Acesso permitido apenas para administradores.'], 403);
+        }
+
+        $token = $user->createToken('provider_token', ['provider'])->plainTextToken;
+
+        $user->load('company');
 
         return response()->json([
             'token' => $token,
@@ -36,19 +46,35 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'telefone' => ['nullable', 'string', 'max:40'],
+            'telefone' => ['required', 'string', 'max:40'],
             'objetivo' => ['nullable', 'string', 'max:1000'],
+            'empresa' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $companyName = $request->input('empresa') ?: ($data['objetivo'] ?? ($data['name'] . ' Studio'));
+        $slug = Company::generateUniqueSlug($companyName);
+        $baseUrl = rtrim(config('app.frontend_url', config('app.url', 'http://localhost')), '/');
+
+        $company = Company::create([
+            'nome' => $companyName,
+            'slug' => $slug,
+            'descricao' => $data['objetivo'] ?? null,
+            'agendamento_url' => "{$baseUrl}/e/{$slug}/agendar",
         ]);
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-            'telefone' => $data['telefone'] ?? null,
+            'telefone' => $data['telefone'],
             'objetivo' => $data['objetivo'] ?? null,
+            'role' => 'provider',
+            'company_id' => $company->id,
         ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $user->load('company');
+
+        $token = $user->createToken('provider_token', ['provider'])->plainTextToken;
 
         return response()->json([
             'token' => $token,
@@ -64,6 +90,6 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        return $request->user();
+        return $request->user()->load('company');
     }
 }

@@ -13,5 +13,11 @@ class Service extends Model
         'nome',
         'preco',
         'duracao_minutos',
+        'company_id',
     ];
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

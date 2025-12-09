@@ -13,5 +13,11 @@ class Setting extends Model
         'horario_inicio',
         'horario_fim',
         'intervalo_minutos',
+        'company_id',
     ];
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

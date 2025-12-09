@@ -11,11 +11,11 @@ class AvailabilityService
     /**
      * Retorna os horários disponíveis para uma data, considerando bloqueios e agendamentos ativos.
      */
-    public function horariosDisponiveis(string $data): array
+    public function horariosDisponiveis(string $data, int $companyId): array
     {
-        $settings = Setting::firstOrFail();
+        $settings = Setting::where('company_id', $companyId)->firstOrFail();
 
-        if (BlockedDay::whereDate('data', $data)->exists()) {
+        if (BlockedDay::where('company_id', $companyId)->whereDate('data', $data)->exists()) {
             return [];
         }
 
@@ -23,7 +23,8 @@ class AvailabilityService
         [$horaFim, $minFim] = explode(':', $settings->horario_fim);
         $intervalo = $settings->intervalo_minutos;
 
-        $ocupados = Appointment::whereDate('data', $data)
+        $ocupados = Appointment::where('company_id', $companyId)
+            ->whereDate('data', $data)
             ->where('status', '!=', 'cancelado')
             ->pluck('horario')
             ->toArray();

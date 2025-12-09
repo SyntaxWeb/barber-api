@@ -14,13 +14,14 @@ class StoreAppointmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cliente' => 'required|string|max:255',
-            'telefone' => 'required|string|max:30',
+            'cliente' => 'sometimes|required|string|max:255',
+            'telefone' => 'sometimes|required|string|max:30',
             'data' => 'required|date|after_or_equal:today',
             'horario' => 'required|string',
             'service_id' => 'required|exists:services,id',
-            'preco' => 'required|numeric|min:0',
+            'preco' => 'nullable|numeric|min:0',
             'observacoes' => 'nullable|string',
+            'company_slug' => 'nullable|string|exists:companies,slug',
         ];
     }
 }

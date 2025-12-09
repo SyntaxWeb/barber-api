@@ -11,9 +11,15 @@ class BlockedDay extends Model
 
     protected $fillable = [
         'data',
+        'company_id',
     ];
 
     protected $casts = [
         'data' => 'date',
     ];
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }
