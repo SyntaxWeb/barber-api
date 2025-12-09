@@ -12,7 +12,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $baseUrl = rtrim(config('app.url') ?? 'http://localhost', '/');
+        $baseUrl = rtrim(config('app.url') ?? 'http://localhost:4001', '/');
 
         $company = \App\Models\Company::firstOrCreate(
             ['slug' => 'syntaxatendimento'],

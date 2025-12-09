@@ -70,6 +70,24 @@ class AppointmentController extends Controller
 
         unset($data['company_slug']);
 
+        $existingAppointment = Appointment::where('company_id', $companyId)
+            ->whereDate('data', $data['data'])
+            ->where('horario', $data['horario'])
+            ->first();
+
+        if ($existingAppointment) {
+            if ($existingAppointment->status !== 'cancelado') {
+                return response()->json(['message' => 'Horário já ocupado.'], 422);
+            }
+
+            $existingAppointment->update($data + [
+                'status' => 'confirmado',
+                'user_id' => $user->id,
+            ]);
+
+            return new AppointmentResource($existingAppointment->load('service'));
+        }
+
         $appointment = Appointment::create($data + [
             'user_id' => $user->id,
             'company_id' => $companyId,

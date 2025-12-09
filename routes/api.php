@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\ClientAuthController;
+use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
@@ -44,6 +45,9 @@ Route::middleware(['auth:sanctum', 'abilities:provider'])->group(function () {
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update']);
     Route::post('/appointments/{appointment}/status', [AppointmentController::class, 'status']);
     Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy']);
+
+    Route::get('/clients', [ClientController::class, 'index']);
+    Route::post('/clients', [ClientController::class, 'store']);
 });
 
 Route::post('/appointments', [AppointmentController::class, 'store'])->middleware('auth:sanctum');

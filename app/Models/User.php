@@ -25,6 +25,7 @@ class User extends Authenticatable
         'objetivo',
         'role',
         'company_id',
+        'observacoes',
     ];
 
     /**
