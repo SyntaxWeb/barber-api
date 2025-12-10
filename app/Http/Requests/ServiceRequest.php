@@ -9,7 +9,7 @@ class ServiceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return (bool) $this->user()?->company_id;
     }
 
     public function rules(): array
@@ -21,13 +21,17 @@ class ServiceRequest extends FormRequest
 
         $companyId = $this->user()?->company_id;
 
+        if (!$companyId) {
+            abort(403, 'Usuário precisa estar vinculado a uma empresa.');
+        }
+
         return [
             'nome' => [
                 'required',
                 'string',
                 'max:255',
                 Rule::unique('services', 'nome')
-                    ->where(fn ($query) => $companyId ? $query->where('company_id', $companyId) : $query)
+                    ->where(fn ($query) => $query->where('company_id', $companyId))
                     ->ignore($serviceId),
             ],
             'preco' => 'required|numeric|min:0',
