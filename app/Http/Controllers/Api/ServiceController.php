@@ -19,19 +19,23 @@ class ServiceController extends Controller
 
     public function store(ServiceRequest $request)
     {
-        if (!$request->user()->company_id) {
+        $user = $request->user('sanctum');
+
+        if (!$user?->company_id) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
 
         $service = Service::create($request->validated() + [
-            'company_id' => $request->user()->company_id,
+            'company_id' => $user->company_id,
         ]);
         return new ServiceResource($service);
     }
 
     public function update(ServiceRequest $request, Service $service)
     {
-        if ($service->company_id !== $request->user()->company_id) {
+        $user = $request->user('sanctum');
+
+        if ($service->company_id !== $user?->company_id) {
             abort(403, 'Serviço não pertence à sua empresa.');
         }
 
@@ -41,7 +45,9 @@ class ServiceController extends Controller
 
     public function destroy(Request $request, Service $service)
     {
-        if ($service->company_id !== $request->user()->company_id) {
+        $user = $request->user('sanctum');
+
+        if ($service->company_id !== $user?->company_id) {
             abort(403, 'Serviço não pertence à sua empresa.');
         }
 
@@ -51,8 +57,10 @@ class ServiceController extends Controller
 
     private function resolveCompanyId(Request $request): int
     {
-        if ($request->user()?->company_id) {
-            return $request->user()->company_id;
+        $user = $request->user('sanctum');
+
+        if ($user?->company_id) {
+            return $user->company_id;
         }
 
         if ($slug = $request->query('company')) {
