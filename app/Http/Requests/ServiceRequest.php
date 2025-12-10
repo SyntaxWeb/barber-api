@@ -9,7 +9,7 @@ class ServiceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return (bool) $this->user()?->company_id;
+        return (bool) $this->user('sanctum')?->company_id;
     }
 
     public function rules(): array
@@ -19,7 +19,7 @@ class ServiceRequest extends FormRequest
             $serviceId = $serviceId->getKey();
         }
 
-        $companyId = $this->user()?->company_id;
+        $companyId = $this->user('sanctum')?->company_id;
 
         if (!$companyId) {
             abort(403, 'Usuário precisa estar vinculado a uma empresa.');
