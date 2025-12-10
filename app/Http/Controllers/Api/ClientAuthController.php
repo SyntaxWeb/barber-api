@@ -7,17 +7,33 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 
 class ClientAuthController extends Controller
 {
     public function register(Request $request)
     {
-        $data = $request->validate([
+        // Dados recebidos da requisição
+        $dados = $request->all();
+
+        // Validação manual com mensagens personalizadas
+        $validator = Validator::make($dados, [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
             'telefone' => ['required', 'string', 'max:40'],
         ]);
+
+        // Verifica se a validação falhou
+        if ($validator->fails()) {
+            // Retorna os erros de validação com um status 422 (Unprocessable Entity)
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Se a validação passar, prossegue com o processamento
+        $data = $validator->validated();
 
         $client = User::create([
             'name' => $data['name'],
