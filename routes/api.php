@@ -15,7 +15,7 @@ Route::get('/availability', AvailabilityController::class);
 Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
 
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
+Route::middleware('cors')->post('/register', [AuthController::class, 'register']);
 
 Route::prefix('clients')->group(function () {
     Route::post('/register', [ClientAuthController::class, 'register']);

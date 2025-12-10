@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -42,7 +43,11 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $data = $request->validate([
+        // Dados recebidos da requisição
+        $dados = $request->all();
+
+        // Validação manual com mensagens personalizadas
+        $validator = Validator::make($dados, [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
@@ -50,6 +55,17 @@ class AuthController extends Controller
             'objetivo' => ['nullable', 'string', 'max:1000'],
             'empresa' => ['nullable', 'string', 'max:255'],
         ]);
+
+        // Verifica se a validação falhou
+        if ($validator->fails()) {
+            // Retorna os erros de validação com um status 422 (Unprocessable Entity)
+            return response()->json([
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Se a validação passar, prossegue com o processamento
+        $data = $validator->validated();
 
         $companyName = $request->input('empresa') ?: ($data['objetivo'] ?? ($data['name'] . ' Studio'));
         $slug = Company::generateUniqueSlug($companyName);
