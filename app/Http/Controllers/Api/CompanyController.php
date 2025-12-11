@@ -11,7 +11,7 @@ class CompanyController extends Controller
 {
     public function show(Request $request)
     {
-        $company = $request->user()->company;
+        $company = $request->user('sanctum')?->company;
 
         if (!$company) {
             return response()->json(['message' => 'Empresa não encontrada.'], 404);
@@ -24,7 +24,7 @@ class CompanyController extends Controller
 
     public function update(Request $request)
     {
-        $user = $request->user();
+        $user = $request->user('sanctum');
         $company = $user->company;
 
         if (!$company) {
@@ -35,6 +35,9 @@ class CompanyController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'descricao' => ['nullable', 'string', 'max:1000'],
             'icone' => ['nullable', 'image', 'max:2048'],
+            'notify_email' => ['nullable', 'email'],
+            'notify_via_email' => ['nullable', 'boolean'],
+            'notify_via_telegram' => ['nullable', 'boolean'],
         ]);
 
         if ($request->hasFile('icone')) {
@@ -48,6 +51,9 @@ class CompanyController extends Controller
             'nome' => $data['nome'],
             'descricao' => $data['descricao'] ?? null,
             'icon_path' => $data['icon_path'] ?? $company->icon_path,
+            'notify_email' => $data['notify_email'] ?? $company->notify_email,
+            'notify_via_email' => $request->boolean('notify_via_email'),
+            'notify_via_telegram' => $request->boolean('notify_via_telegram'),
         ]);
 
         $company->refresh();

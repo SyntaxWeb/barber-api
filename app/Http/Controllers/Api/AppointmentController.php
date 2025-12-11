@@ -6,17 +6,21 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
+use App\Jobs\SendAppointmentAlertJob;
 use App\Models\Appointment;
 use App\Models\Company;
 use App\Models\Service;
+use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Validator;
 
 class AppointmentController extends Controller
 {
     public function index(Request $request)
     {
-        $companyId = $request->user()->company_id;
+        $companyId = $request->user('sanctum')?->company_id;
         if (!$companyId) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
@@ -34,10 +38,31 @@ class AppointmentController extends Controller
         );
     }
 
-    public function store(StoreAppointmentRequest $request, AvailabilityService $availability)
+    public function store(Request $request, AvailabilityService $availability)
     {
-        $data = $request->validated();
-        $user = $request->user();
+
+        $validator = Validator::make($request->all(), [
+            'cliente'       => 'sometimes|required|string|max:255',
+            'telefone'      => 'sometimes|required|string|max:30',
+            'data'          => 'required|date|after_or_equal:today',
+            'horario'       => 'required|string',
+            'service_id'    => 'required|exists:services,id',
+            'preco'         => 'nullable|numeric|min:0',
+            'observacoes'   => 'nullable|string',
+            'company_slug'  => 'nullable|string|exists:companies,slug',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Erro de validação.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
+        $user = $request->user('sanctum');
 
         if (!in_array($user->role, ['provider', 'client'])) {
             return response()->json(['message' => 'Usuário não autorizado a criar agendamentos.'], 403);
@@ -85,7 +110,9 @@ class AppointmentController extends Controller
                 'user_id' => $user->id,
             ]);
 
-            return new AppointmentResource($existingAppointment->load('service'));
+            $existingAppointment->load('service', 'company.users');
+            $this->notifyCompanyUsers($existingAppointment);
+            return new AppointmentResource($existingAppointment);
         }
 
         $appointment = Appointment::create($data + [
@@ -93,18 +120,21 @@ class AppointmentController extends Controller
             'company_id' => $companyId,
         ]);
 
-        return new AppointmentResource($appointment->load('service'));
+        $appointment->load('service', 'company.users');
+        $this->notifyCompanyUsers($appointment);
+
+        return new AppointmentResource($appointment);
     }
 
     public function update(StoreAppointmentRequest $request, Appointment $appointment, AvailabilityService $availability)
     {
-        if ($appointment->company_id !== $request->user()->company_id) {
+        if ($appointment->company_id !== $request->user('sanctum')?->company_id) {
             abort(403, 'Agendamento não pertence à sua empresa.');
         }
 
         $data = $request->validated();
         if (!array_key_exists('preco', $data)) {
-            $service = Service::where('company_id', $request->user()->company_id)->find($data['service_id']);
+            $service = Service::where('company_id', $request->user('sanctum')?->company_id)->find($data['service_id']);
             if ($service) {
                 $data['preco'] = $service->preco;
             }
@@ -124,7 +154,7 @@ class AppointmentController extends Controller
 
     public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
-        if ($appointment->company_id !== $request->user()->company_id) {
+        if ($appointment->company_id !== $request->user('sanctum')?->company_id) {
             abort(403, 'Agendamento não pertence à sua empresa.');
         }
 
@@ -134,7 +164,7 @@ class AppointmentController extends Controller
 
     public function destroy(Request $request, Appointment $appointment)
     {
-        if ($appointment->company_id !== $request->user()->company_id) {
+        if ($appointment->company_id !== $request->user('sanctum')?->company_id) {
             abort(403, 'Agendamento não pertence à sua empresa.');
         }
 
@@ -153,5 +183,28 @@ class AppointmentController extends Controller
         }
 
         return Company::first()?->id;
+    }
+
+    private function notifyCompanyUsers(Appointment $appointment): void
+    {
+        $company = $appointment->company;
+
+        if (!$company) {
+            return;
+        }
+        $recipients = $company->users()->where('role', 'provider')->get();
+
+        $appointment->loadMissing('user');
+        if ($appointment->user && $appointment->user->role === 'client') {
+            $recipients->push($appointment->user);
+        }
+
+        $recipients = $recipients->unique('id');
+
+        if ($recipients->isNotEmpty()) {
+            Notification::send($recipients, new NewAppointmentNotification($appointment));
+        }
+
+        SendAppointmentAlertJob::dispatch($appointment->id);
     }
 }

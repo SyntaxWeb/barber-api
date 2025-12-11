@@ -18,6 +18,12 @@ class Company extends Model
         'agendamento_url',
         'qr_code_svg',
         'icon_path',
+        'notify_email',
+        'notify_telegram',
+        'notify_via_email',
+        'notify_via_telegram',
+        'telegram_link_token',
+        'telegram_link_token_created_at',
     ];
 
     protected $appends = [
@@ -26,6 +32,13 @@ class Company extends Model
 
     protected $hidden = [
         'icon_path',
+        'telegram_link_token',
+    ];
+
+    protected $casts = [
+        'notify_via_email' => 'boolean',
+        'notify_via_telegram' => 'boolean',
+        'telegram_link_token_created_at' => 'datetime',
     ];
 
     public function users()

@@ -18,6 +18,7 @@ return [
     'paths' => ['*'],
 
     'allowed_methods' => ['*'],
+    
     'allowed_origins' => ['*'],
 
     // 'allowed_origins' => array_filter(array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:4001,http://127.0.0.1:4001,https://barberapp.syntaxweb.com.br')))),

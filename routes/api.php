@@ -8,11 +8,15 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\TelegramSetupController;
+use App\Http\Controllers\Api\NotificationController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/services', [ServiceController::class, 'index']);
-Route::get('/availability', AvailabilityController::class);
-Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+Route::middleware('cors')->group(function () {
+    Route::get('/services', [ServiceController::class, 'index']);
+    Route::get('/availability', AvailabilityController::class);
+    Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+});
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('cors')->post('/register', [AuthController::class, 'register']);
@@ -27,7 +31,7 @@ Route::prefix('clients')->middleware('cors')->group(function () {
     });
 });
 
-Route::middleware(['auth:sanctum', 'abilities:provider'])->group(function () {
+Route::middleware(['cors' ,'auth:sanctum', 'abilities:provider' ])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
@@ -48,6 +52,13 @@ Route::middleware(['auth:sanctum', 'abilities:provider'])->group(function () {
 
     Route::get('/clients', [ClientController::class, 'index']);
     Route::post('/clients', [ClientController::class, 'store']);
+
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAll']);
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+
+    Route::post('/company/telegram/link', [TelegramSetupController::class, 'createLink']);
+    Route::post('/company/telegram/link/verify', [TelegramSetupController::class, 'verifyLink']);
 });
 
-Route::post('/appointments', [AppointmentController::class, 'store'])->middleware('auth:sanctum');
+Route::post('/appointments', [AppointmentController::class, 'store'])->middleware(['cors', 'auth:sanctum']);
