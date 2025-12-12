@@ -40,6 +40,50 @@ class MercadoPagoService
         return $response->json();
     }
 
+    public function createPaymentLink(array $data): array
+    {
+        $baseFront = rtrim(config('app.frontend_url', config('app.url')), '/');
+        $backUrls = $data['back_urls'] ?? [
+            'success' => "{$baseFront}/assinatura/sucesso",
+            'failure' => "{$baseFront}/assinatura/erro",
+            'pending' => "{$baseFront}/assinatura/pendente",
+        ];
+
+        $payload = array_filter([
+            'items' => [
+                [
+                    'title' => $data['title'] ?? 'Assinatura',
+                    'quantity' => $data['quantity'] ?? 1,
+                    'currency_id' => $data['currency_id'] ?? 'BRL',
+                    'unit_price' => $data['unit_price'],
+                ],
+            ],
+            'payer' => array_filter([
+                'email' => $data['payer']['email'] ?? null,
+                'name' => $data['payer']['name'] ?? null,
+            ]),
+            'external_reference' => $data['external_reference'] ?? null,
+            'auto_return' => $data['auto_return'] ?? 'approved',
+            'back_urls' => $backUrls,
+            'notification_url' => $data['notification_url'] ?? null,
+        ], fn ($value) => $value !== null && $value !== []);
+
+        if (empty($payload['notification_url'])) {
+            $payload['notification_url'] = rtrim(config('app.url'), '/') . '/api/mercadopago/webhook';
+        }
+
+        return $this->handleResponse(
+            $this->http()->post("{$this->baseUri}/checkout/preferences", $payload)
+        );
+    }
+
+    public function findPayment(string $paymentId): array
+    {
+        return $this->handleResponse(
+            $this->http()->get("{$this->baseUri}/v1/payments/{$paymentId}")
+        );
+    }
+
     /**
      * Retrieve subscriptions (preapprovals) from Mercado Pago.
      *
@@ -211,9 +255,6 @@ class MercadoPagoService
         if (!empty($options['payer_name'])) {
             $payload['payer_name'] = $options['payer_name'];
         }
-
-        dd($payload);
-        dd( $this->http()->post("{$this->baseUri}/preapproval", $payload));
         return $this->handleResponse(
             $this->http()->post("{$this->baseUri}/preapproval", $payload)
         );

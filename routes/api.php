@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TelegramSetupController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\MercadoPagoWebhookController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
@@ -17,9 +18,10 @@ use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
-    Route::get('/services', [ServiceController::class, 'index']);
-    Route::get('/availability', AvailabilityController::class);
-    Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+Route::get('/services', [ServiceController::class, 'index']);
+Route::get('/availability', AvailabilityController::class);
+Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class);
 });
 
 Route::post('/login', [AuthController::class, 'login']);

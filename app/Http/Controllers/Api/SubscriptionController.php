@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\SubscriptionOrder;
 use App\Services\MercadoPagoService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class SubscriptionController extends Controller
 {
@@ -19,6 +21,8 @@ class SubscriptionController extends Controller
         $planKey = $company->subscription_plan;
         $plan = $plans[$planKey] ?? null;
 
+        $latestOrder = $company->subscriptionOrders()->latest()->first();
+
         return response()->json([
             'company' => $company->only([
                 'id',
@@ -32,6 +36,11 @@ class SubscriptionController extends Controller
             'available_plans' => collect($plans)
                 ->map(fn ($data, $key) => array_merge($data, ['key' => $key]))
                 ->values(),
+            'latest_order' => $latestOrder ? [
+                'status' => $latestOrder->status,
+                'checkout_url' => $latestOrder->checkout_url,
+                'created_at' => $latestOrder->created_at,
+            ] : null,
         ]);
     }
 
@@ -56,15 +65,36 @@ class SubscriptionController extends Controller
         }
 
         $planData = $plans[$planKey];
-        $checkout = $mercadoPago->createSubscriptionCheckout($planKey, $planData, [
+
+        $order = SubscriptionOrder::create([
             'company_id' => $company->id,
-            'payer_email' => $user->email,
-            'payer_name' => $user->name,
+            'external_reference' => (string) Str::uuid(),
+            'plan_key' => $planKey,
+            'plan_name' => $planData['name'] ?? ucfirst($planKey),
+            'price' => $planData['price'],
+            'status' => 'pendente',
+        ]);
+
+        $preference = $mercadoPago->createPaymentLink([
+            'title' => $planData['name'] ?? 'Assinatura',
+            'unit_price' => $planData['price'],
+            'external_reference' => $order->external_reference,
+            'payer' => [
+                'email' => $user->email,
+                'name' => $user->name,
+            ],
+        ]);
+
+        $checkoutUrl = $preference['init_point'] ?? $preference['sandbox_init_point'] ?? null;
+
+        $order->update([
+            'mp_preference_id' => $preference['id'] ?? null,
+            'checkout_url' => $checkoutUrl,
         ]);
 
         return response()->json([
-            'checkout_url' => $checkout['init_point'] ?? $checkout['sandbox_init_point'] ?? null,
-            'subscription' => $checkout,
+            'checkout_url' => $checkoutUrl,
+            'order_id' => $order->id,
         ]);
     }
 }

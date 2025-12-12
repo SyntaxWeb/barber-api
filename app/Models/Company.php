@@ -100,6 +100,11 @@ class Company extends Model
         return $this->hasMany(BlockedDay::class);
     }
 
+    public function subscriptionOrders()
+    {
+        return $this->hasMany(SubscriptionOrder::class);
+    }
+
     public static function generateUniqueSlug(string $name): string
     {
         $base = Str::slug($name) ?: Str::random(6);
