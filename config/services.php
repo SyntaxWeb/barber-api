@@ -36,4 +36,9 @@ return [
         'bot_username' => env('TELEGRAM_BOT_USERNAME', 'syntax_atendimento_bot'),
     ],
 
+    'mercadopago' => [
+        'access_token' => env('MERCADO_PAGO_ACCESS_TOKEN'),
+        'base_uri' => env('MERCADO_PAGO_BASE_URI', 'https://api.mercadopago.com'),
+    ],
+
 ];

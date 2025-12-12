@@ -20,22 +20,18 @@ class SendAppointmentAlertJob implements ShouldQueue
 
     public function handle(): void
     {
-        $appointment = Appointment::with(['company', 'service'])->find($this->appointmentId);
+        $appointment = Appointment::with(['company', 'service', 'user'])->find($this->appointmentId);
         if (!$appointment || !$appointment->company) {
             return;
         }
 
         $company = $appointment->company;
+        $serviceName = optional($appointment->service)->nome ?? 'Serviço';
+        $dateText = optional($appointment->data)->format('d/m/Y') ?: (string) $appointment->data;
         $priceText = $appointment->preco !== null
-            ? 'Valor previsto: R$ ' . number_format((float) $appointment->preco, 2, ',', '.')
-            : null;
-
-
-        $priceText = $appointment->preco !== null
-            ? 'R$ ' . number_format($appointment->preco, 2, ',', '.')
-            : '—';
-
-        $companyText = $company?->nome ?? '—';
+            ? 'R$ ' . number_format((float) $appointment->preco, 2, ',', '.')
+            : 'A combinar';
+        $companyText = $company?->nome ?? 'Sua barbearia';
 
         $message = sprintf(
             "💈 *Novo Agendamento Confirmado!* 💈\n\n" .
@@ -47,9 +43,9 @@ class SendAppointmentAlertJob implements ShouldQueue
                 "🏪 *Empresa:* %s\n\n" .
                 "✨ Prepare-se! Um novo cliente garantiu um horário com você!",
             $appointment->cliente,
-            $appointment->data?->format('d/m/Y'),
+            $dateText,
             $appointment->horario,
-            $appointment->service->nome ?? 'Serviço',
+            $serviceName,
             $priceText,
             $companyText
         );
@@ -58,6 +54,30 @@ class SendAppointmentAlertJob implements ShouldQueue
             Mail::raw($message, function ($mail) use ($company) {
                 $mail->to($company->notify_email)
                     ->subject('Novo agendamento recebido');
+            });
+        }
+
+        if ($appointment->user && $appointment->user->email) {
+            $clientMessage = sprintf(
+                "💈 *Seu agendamento foi recebido!* 💈\n\n" .
+                    "👤 *Cliente:* %s\n" .
+                    "💈 *Serviço:* %s\n" .
+                    "📅 *Data:* %s\n" .
+                    "⏰ *Horário:* %s\n" .
+                    "💲 *Valor:* %s\n" .
+                    "🏪 *Empresa:* %s\n\n" .
+                    "",
+                $appointment->user->name ?? $appointment->cliente,
+                $serviceName,
+                $dateText,
+                $appointment->horario,
+                $priceText,
+                $companyText
+            );
+
+            Mail::raw($clientMessage, function ($mail) use ($appointment) {
+                $mail->to($appointment->user->email)
+                    ->subject('Recebemos seu agendamento');
             });
         }
 
@@ -82,6 +102,7 @@ class SendAppointmentAlertJob implements ShouldQueue
             Http::asForm()->post("https://api.telegram.org/bot{$token}/sendMessage", [
                 'chat_id' => $chatId,
                 'text' => $message,
+                'parse_mode' => 'Markdown',
             ]);
         } catch (\Throwable $exception) {
             Log::error('Falha ao enviar notificação para o Telegram', [

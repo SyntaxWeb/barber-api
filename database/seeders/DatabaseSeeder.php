@@ -14,6 +14,9 @@ class DatabaseSeeder extends Seeder
     {
         $baseUrl = rtrim(config('app.url') ?? 'http://localhost:4001', '/');
 
+        $adminEmail = env('SUPERADMIN_EMAIL', 'admin@barber.com');
+        $adminPassword = env('SUPERADMIN_PASSWORD', 'admin123');
+
         $company = \App\Models\Company::firstOrCreate(
             ['slug' => 'syntaxatendimento'],
             [
@@ -86,5 +89,15 @@ class DatabaseSeeder extends Seeder
                 'updated_at' => now(),
             ],
         ]);
+
+        \App\Models\User::updateOrCreate(
+            ['email' => $adminEmail],
+            [
+                'name' => 'Super Admin',
+                'password' => bcrypt($adminPassword),
+                'role' => 'admin',
+                'company_id' => null,
+            ]
+        );
     }
 }

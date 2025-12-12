@@ -26,12 +26,15 @@ class AuthController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        if ($user->role !== 'provider') {
+        if (!in_array($user->role, ['provider', 'admin'], true)) {
             Auth::logout();
             return response()->json(['message' => 'Acesso permitido apenas para administradores.'], 403);
         }
 
-        $token = $user->createToken('provider_token', ['provider'])->plainTextToken;
+        $abilities = $user->role === 'admin'
+            ? ['admin', 'provider']
+            : ['provider'];
+        $token = $user->createToken('provider_token', $abilities)->plainTextToken;
 
         $user->load('company');
 
@@ -77,6 +80,16 @@ class AuthController extends Controller
             'descricao' => $data['objetivo'] ?? null,
             'agendamento_url' => "{$baseUrl}/e/{$slug}/agendar",
         ]);
+
+        $defaultPlan = config('subscriptions.plans.mensal');
+        if ($defaultPlan) {
+            $company->forceFill([
+                'subscription_plan' => 'mensal',
+                'subscription_status' => 'ativo',
+                'subscription_price' => $defaultPlan['price'],
+                'subscription_renews_at' => now()->addMonths($defaultPlan['months']),
+            ])->save();
+        }
 
         $user = User::create([
             'name' => $data['name'],

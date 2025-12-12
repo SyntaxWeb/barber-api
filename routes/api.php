@@ -10,6 +10,10 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TelegramSetupController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
+use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
@@ -28,11 +32,12 @@ Route::prefix('clients')->middleware('cors')->group(function () {
     Route::middleware(['auth:sanctum', 'abilities:client'])->group(function () {
         Route::post('/logout', [ClientAuthController::class, 'logout']);
         Route::get('/me', [ClientAuthController::class, 'me']);
+        Route::post('/profile', [ProfileController::class, 'updateClient']);
     });
 });
 
-Route::middleware(['cors' ,'auth:sanctum', 'abilities:provider' ])->group(function () {
-    Route::post('/logout', [AuthController::class, 'logout']);
+Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscription.active' ])->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout'])->withoutMiddleware('subscription.active');
     Route::get('/me', [AuthController::class, 'me']);
 
     Route::post('/services', [ServiceController::class, 'store']);
@@ -59,6 +64,16 @@ Route::middleware(['cors' ,'auth:sanctum', 'abilities:provider' ])->group(functi
 
     Route::post('/company/telegram/link', [TelegramSetupController::class, 'createLink']);
     Route::post('/company/telegram/link/verify', [TelegramSetupController::class, 'verifyLink']);
+    Route::post('/profile', [ProfileController::class, 'updateProvider']);
+    Route::get('/subscription', [SubscriptionController::class, 'show'])->withoutMiddleware('subscription.active');
+    Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])->withoutMiddleware('subscription.active');
 });
 
+Route::prefix('admin')->middleware(['cors', 'auth:sanctum', 'abilities:admin'])->group(function () {
+    Route::get('/providers', [UserManagementController::class, 'index']);
+    Route::get('/plans', [UserManagementController::class, 'plans']);
+    Route::post('/providers/{company}/subscription', [UserManagementController::class, 'updateSubscription']);
+    Route::get('/mercado-pago/subscriptions', [MercadoPagoController::class, 'index']);
+    Route::post('/mercado-pago/plans/sync', [MercadoPagoController::class, 'syncPlans']);
+});
 Route::post('/appointments', [AppointmentController::class, 'store'])->middleware(['cors', 'auth:sanctum']);
