@@ -85,7 +85,7 @@ class AuthController extends Controller
         if ($defaultPlan) {
             $company->forceFill([
                 'subscription_plan' => 'mensal',
-                'subscription_status' => 'ativo',
+                'subscription_status' => 'pendente',
                 'subscription_price' => $defaultPlan['price'],
                 'subscription_renews_at' => now()->addMonths($defaultPlan['months']),
             ])->save();
