@@ -13,7 +13,12 @@ class Setting extends Model
         'horario_inicio',
         'horario_fim',
         'intervalo_minutos',
+        'weekly_schedule',
         'company_id',
+    ];
+
+    protected $casts = [
+        'weekly_schedule' => 'array',
     ];
 
     public function company()
