@@ -12,6 +12,7 @@ use App\Models\Company;
 use App\Models\Service;
 use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
+use App\Services\ActivityLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
@@ -112,6 +113,12 @@ class AppointmentController extends Controller
 
             $existingAppointment->load('service', 'company.users');
             $this->notifyCompanyUsers($existingAppointment);
+            ActivityLogger::record($user, 'appointment.reactivated', [
+                'appointment_id' => $existingAppointment->id,
+                'data' => $existingAppointment->data?->toDateString(),
+                'horario' => $existingAppointment->horario,
+                'service_id' => $existingAppointment->service_id,
+            ], $request);
             return new AppointmentResource($existingAppointment);
         }
 
@@ -122,6 +129,12 @@ class AppointmentController extends Controller
 
         $appointment->load('service', 'company.users');
         $this->notifyCompanyUsers($appointment);
+        ActivityLogger::record($user, 'appointment.created', [
+            'appointment_id' => $appointment->id,
+            'data' => $appointment->data?->toDateString(),
+            'horario' => $appointment->horario,
+            'service_id' => $appointment->service_id,
+        ], $request);
 
         return new AppointmentResource($appointment);
     }
@@ -148,6 +161,12 @@ class AppointmentController extends Controller
         }
 
         $appointment->update($data);
+        ActivityLogger::record($request->user('sanctum'), 'appointment.updated', [
+            'appointment_id' => $appointment->id,
+            'data' => $data['data'],
+            'horario' => $data['horario'],
+            'service_id' => $data['service_id'],
+        ], $request);
 
         return new AppointmentResource($appointment->load('service'));
     }
@@ -159,6 +178,10 @@ class AppointmentController extends Controller
         }
 
         $appointment->update(['status' => $request->validated()['status']]);
+        ActivityLogger::record($request->user('sanctum'), 'appointment.status_updated', [
+            'appointment_id' => $appointment->id,
+            'status' => $request->validated()['status'],
+        ], $request);
         return new AppointmentResource($appointment->load('service'));
     }
 
@@ -169,6 +192,9 @@ class AppointmentController extends Controller
         }
 
         $appointment->delete();
+        ActivityLogger::record($request->user('sanctum'), 'appointment.deleted', [
+            'appointment_id' => $appointment->id,
+        ], $request);
         return response()->noContent();
     }
 

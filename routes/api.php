@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\ClientAuthController;
+use App\Http\Controllers\Api\ClientAppointmentController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ServiceController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
 use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
+use App\Http\Controllers\Api\SuperAdmin\ActivityLogController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
@@ -35,6 +37,9 @@ Route::prefix('clients')->middleware('cors')->group(function () {
         Route::post('/logout', [ClientAuthController::class, 'logout']);
         Route::get('/me', [ClientAuthController::class, 'me']);
         Route::post('/profile', [ProfileController::class, 'updateClient']);
+        Route::get('/appointments', [ClientAppointmentController::class, 'index']);
+        Route::put('/appointments/{appointment}', [ClientAppointmentController::class, 'update']);
+        Route::post('/appointments/{appointment}/cancel', [ClientAppointmentController::class, 'cancel']);
     });
 });
 
@@ -77,5 +82,6 @@ Route::prefix('admin')->middleware(['cors', 'auth:sanctum', 'abilities:admin'])-
     Route::post('/providers/{company}/subscription', [UserManagementController::class, 'updateSubscription']);
     Route::get('/mercado-pago/subscriptions', [MercadoPagoController::class, 'index']);
     Route::post('/mercado-pago/plans/sync', [MercadoPagoController::class, 'syncPlans']);
+    Route::get('/logs', [ActivityLogController::class, 'index']);
 });
 Route::post('/appointments', [AppointmentController::class, 'store'])->middleware(['cors', 'auth:sanctum']);

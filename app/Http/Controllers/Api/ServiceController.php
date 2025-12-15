@@ -8,6 +8,7 @@ use App\Http\Resources\ServiceResource;
 use App\Models\Company;
 use App\Models\Service;
 use Illuminate\Http\Request;
+use App\Services\ActivityLogger;
 
 class ServiceController extends Controller
 {
@@ -28,6 +29,10 @@ class ServiceController extends Controller
         $service = Service::create($request->validated() + [
             'company_id' => $user->company_id,
         ]);
+        ActivityLogger::record($user, 'service.created', [
+            'service_id' => $service->id,
+            'nome' => $service->nome,
+        ], $request);
         return new ServiceResource($service);
     }
 
@@ -40,6 +45,10 @@ class ServiceController extends Controller
         }
 
         $service->update($request->validated());
+        ActivityLogger::record($user, 'service.updated', [
+            'service_id' => $service->id,
+            'nome' => $service->nome,
+        ], $request);
         return new ServiceResource($service);
     }
 
@@ -52,6 +61,10 @@ class ServiceController extends Controller
         }
 
         $service->delete();
+        ActivityLogger::record($user, 'service.deleted', [
+            'service_id' => $service->id,
+            'nome' => $service->nome,
+        ], $request);
         return response()->noContent();
     }
 
