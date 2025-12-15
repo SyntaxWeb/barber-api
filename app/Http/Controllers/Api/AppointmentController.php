@@ -25,7 +25,7 @@ class AppointmentController extends Controller
         if (!$companyId) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
-        $query = Appointment::with('service')->where('company_id', $companyId);
+        $query = Appointment::with(['service', 'company'])->where('company_id', $companyId);
 
         if ($request->has('date')) {
             $query->whereDate('data', $request->date);
@@ -111,7 +111,7 @@ class AppointmentController extends Controller
                 'user_id' => $user->id,
             ]);
 
-            $existingAppointment->load('service', 'company.users');
+            $existingAppointment->load('service', 'company', 'company.users');
             $this->notifyCompanyUsers($existingAppointment);
             ActivityLogger::record($user, 'appointment.reactivated', [
                 'appointment_id' => $existingAppointment->id,
@@ -127,7 +127,7 @@ class AppointmentController extends Controller
             'company_id' => $companyId,
         ]);
 
-        $appointment->load('service', 'company.users');
+        $appointment->load('service', 'company', 'company.users');
         $this->notifyCompanyUsers($appointment);
         ActivityLogger::record($user, 'appointment.created', [
             'appointment_id' => $appointment->id,
@@ -168,7 +168,7 @@ class AppointmentController extends Controller
             'service_id' => $data['service_id'],
         ], $request);
 
-        return new AppointmentResource($appointment->load('service'));
+        return new AppointmentResource($appointment->load('service', 'company'));
     }
 
     public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment)
@@ -182,7 +182,7 @@ class AppointmentController extends Controller
             'appointment_id' => $appointment->id,
             'status' => $request->validated()['status'],
         ], $request);
-        return new AppointmentResource($appointment->load('service'));
+        return new AppointmentResource($appointment->load('service', 'company'));
     }
 
     public function destroy(Request $request, Appointment $appointment)

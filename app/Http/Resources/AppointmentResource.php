@@ -19,6 +19,13 @@ class AppointmentResource extends JsonResource
             'preco' => (float) $this->preco,
             'status' => $this->status,
             'observacoes' => $this->observacoes,
+            'company' => $this->whenLoaded('company', function () {
+                return [
+                    'id' => $this->company?->id,
+                    'nome' => $this->company?->nome,
+                    'slug' => $this->company?->slug,
+                ];
+            }),
         ];
     }
 }

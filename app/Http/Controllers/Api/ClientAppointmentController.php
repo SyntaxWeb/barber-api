@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
+use App\Jobs\SendAppointmentAlertJob;
 use App\Models\Appointment;
 use App\Models\Service;
+use App\Notifications\AppointmentChangedNotification;
 use App\Services\AvailabilityService;
+use App\Services\ActivityLogger;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 class ClientAppointmentController extends Controller
 {
@@ -17,7 +21,7 @@ class ClientAppointmentController extends Controller
     {
         $user = $request->user('sanctum');
 
-        $query = Appointment::with('service')
+        $query = Appointment::with(['service', 'company'])
             ->where('user_id', $user->id)
             ->orderBy('data')
             ->orderBy('horario');
@@ -65,8 +69,16 @@ class ClientAppointmentController extends Controller
         }
 
         $appointment->update($data);
+        ActivityLogger::record($user, 'client.appointment.updated', [
+            'appointment_id' => $appointment->id,
+            'data' => $data['data'],
+            'horario' => $data['horario'],
+            'service_id' => $data['service_id'],
+        ], $request);
+        $this->notifyParticipants($appointment, 'updated');
+        SendAppointmentAlertJob::dispatch($appointment->id, 'updated');
 
-        return new AppointmentResource($appointment->fresh(['service']));
+        return new AppointmentResource($appointment->fresh(['service', 'company']));
     }
 
     public function cancel(Request $request, Appointment $appointment)
@@ -87,7 +99,37 @@ class ClientAppointmentController extends Controller
         }
 
         $appointment->update(['status' => 'cancelado']);
+        ActivityLogger::record($user, 'client.appointment.cancelled', [
+            'appointment_id' => $appointment->id,
+        ], $request);
+        $this->notifyParticipants($appointment, 'cancelled');
+        SendAppointmentAlertJob::dispatch($appointment->id, 'cancelled');
 
-        return new AppointmentResource($appointment->fresh(['service']));
+        return new AppointmentResource($appointment->fresh(['service', 'company']));
+    }
+
+    private function notifyParticipants(Appointment $appointment, string $action): void
+    {
+        $appointment->loadMissing('service', 'company.users', 'user');
+
+        $recipients = collect();
+
+        if ($appointment->company && $appointment->company->relationLoaded('users')) {
+            $recipients = $recipients->merge($appointment->company->users->where('role', 'provider'));
+        } elseif ($appointment->company) {
+            $recipients = $recipients->merge($appointment->company->users()->where('role', 'provider')->get());
+        }
+
+        if ($appointment->user) {
+            $recipients->push($appointment->user);
+        }
+
+        $recipients = $recipients->filter()->unique('id');
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        Notification::send($recipients, new AppointmentChangedNotification($appointment, $action));
     }
 }

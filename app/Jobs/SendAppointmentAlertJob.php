@@ -16,7 +16,7 @@ class SendAppointmentAlertJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(protected int $appointmentId) {}
+    public function __construct(protected int $appointmentId, protected string $action = 'created') {}
 
     public function handle(): void
     {
@@ -33,51 +33,57 @@ class SendAppointmentAlertJob implements ShouldQueue
             : 'A combinar';
         $companyText = $company?->nome ?? 'Sua barbearia';
 
+        $titles = $this->resolveTitles();
+
         $message = sprintf(
-            "💈 *Novo Agendamento Confirmado!* 💈\n\n" .
+            "💈 *%s* 💈\n\n" .
                 "👤 *Cliente:* %s\n" .
                 "📅 *Data:* %s\n" .
                 "⏰ *Horário:* %s\n" .
                 "💈 *Serviço:* %s\n" .
                 "💲 *Valor:* %s\n" .
                 "🏪 *Empresa:* %s\n\n" .
-                "✨ Prepare-se! Um novo cliente garantiu um horário com você!",
+                "%s",
+            $titles['provider_title'],
             $appointment->cliente,
             $dateText,
             $appointment->horario,
             $serviceName,
             $priceText,
-            $companyText
+            $companyText,
+            $titles['provider_footer']
         );
 
         if ($company->notify_via_email && $company->notify_email) {
-            Mail::raw($message, function ($mail) use ($company) {
+            Mail::raw($message, function ($mail) use ($company, $titles) {
                 $mail->to($company->notify_email)
-                    ->subject('Novo agendamento recebido');
+                    ->subject($titles['provider_subject']);
             });
         }
 
         if ($appointment->user && $appointment->user->email) {
             $clientMessage = sprintf(
-                "💈 *Seu agendamento foi recebido!* 💈\n\n" .
+                "💈 *%s* 💈\n\n" .
                     "👤 *Cliente:* %s\n" .
                     "💈 *Serviço:* %s\n" .
                     "📅 *Data:* %s\n" .
                     "⏰ *Horário:* %s\n" .
                     "💲 *Valor:* %s\n" .
                     "🏪 *Empresa:* %s\n\n" .
-                    "",
+                    "%s",
+                $titles['client_title'],
                 $appointment->user->name ?? $appointment->cliente,
                 $serviceName,
                 $dateText,
                 $appointment->horario,
                 $priceText,
-                $companyText
+                $companyText,
+                $titles['client_footer']
             );
 
-            Mail::raw($clientMessage, function ($mail) use ($appointment) {
+            Mail::raw($clientMessage, function ($mail) use ($appointment, $titles) {
                 $mail->to($appointment->user->email)
-                    ->subject('Recebemos seu agendamento');
+                    ->subject($titles['client_subject']);
             });
         }
 
@@ -110,5 +116,34 @@ class SendAppointmentAlertJob implements ShouldQueue
                 'error' => $exception->getMessage(),
             ]);
         }
+    }
+    protected function resolveTitles(): array
+    {
+        return match ($this->action) {
+            'updated' => [
+                'provider_title' => 'Agendamento atualizado',
+                'provider_subject' => 'Agendamento atualizado por um cliente',
+                'provider_footer' => '⚙️ Revise o novo horário e confirme os detalhes.',
+                'client_title' => 'Atualização confirmada',
+                'client_subject' => 'Seu agendamento foi atualizado',
+                'client_footer' => '✅ Guardamos sua alteração. Nos vemos em breve!',
+            ],
+            'cancelled' => [
+                'provider_title' => 'Agendamento cancelado',
+                'provider_subject' => 'Um cliente cancelou o agendamento',
+                'provider_footer' => '🚫 O horário foi liberado automaticamente.',
+                'client_title' => 'Cancelamento confirmado',
+                'client_subject' => 'Seu agendamento foi cancelado',
+                'client_footer' => 'Se precisar reagendar, estamos por aqui.',
+            ],
+            default => [
+                'provider_title' => 'Novo agendamento confirmado!',
+                'provider_subject' => 'Novo agendamento recebido',
+                'provider_footer' => '✨ Prepare-se! Um novo cliente garantiu um horário com você!',
+                'client_title' => 'Seu agendamento foi recebido!',
+                'client_subject' => 'Recebemos seu agendamento',
+                'client_footer' => '✨ Qualquer mudança é só avisar por aqui.',
+            ],
+        };
     }
 }
