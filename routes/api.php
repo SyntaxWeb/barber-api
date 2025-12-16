@@ -32,6 +32,7 @@ Route::middleware('cors')->post('/register', [AuthController::class, 'register']
 Route::prefix('clients')->middleware('cors')->group(function () {
     Route::post('/register', [ClientAuthController::class, 'register']);
     Route::post('/login', [ClientAuthController::class, 'login']);
+    Route::post('/login/google', [ClientAuthController::class, 'loginWithGoogle']);
 
     Route::middleware(['auth:sanctum', 'abilities:client'])->group(function () {
         Route::post('/logout', [ClientAuthController::class, 'logout']);

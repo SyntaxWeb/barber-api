@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\GoogleClientVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class ClientAuthController extends Controller
 {
@@ -88,5 +90,43 @@ class ClientAuthController extends Controller
     public function me(Request $request)
     {
         return $request->user();
+    }
+
+    public function loginWithGoogle(Request $request, GoogleClientVerifier $googleClientVerifier)
+    {
+        $data = $request->validate([
+            'credential' => ['required', 'string'],
+        ]);
+
+        try {
+            $payload = $googleClientVerifier->verify($data['credential']);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Não foi possível validar o token do Google.',
+            ], 422);
+        }
+
+        $client = User::firstOrCreate(
+            ['email' => $payload['email']],
+            [
+                'name' => $payload['name'] ?? $payload['given_name'] ?? 'Cliente Google',
+                'password' => Hash::make(Str::random(32)),
+                'telefone' => $payload['phone_number'] ?? null,
+                'role' => 'client',
+            ],
+        );
+
+        if ($client->role !== 'client') {
+            return response()->json(['message' => 'Esta conta já está vinculada a outro perfil.'], 403);
+        }
+
+        $token = $client->createToken('client_token', ['client'])->plainTextToken;
+
+        return response()->json([
+            'token' => $token,
+            'user' => $client,
+        ]);
     }
 }
