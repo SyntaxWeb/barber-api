@@ -18,12 +18,14 @@ class Appointment extends Model
         'preco',
         'status',
         'observacoes',
+        'reminded_at',
         'user_id',
         'company_id',
     ];
 
     protected $casts = [
         'data' => 'date',
+        'reminded_at' => 'datetime',
     ];
 
     public function service()
