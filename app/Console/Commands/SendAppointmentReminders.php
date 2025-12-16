@@ -42,10 +42,9 @@ class SendAppointmentReminders extends Command
                 continue;
             }
             $appointment->user->notify(new AppointmentReminderNotification($appointment));
-            // $appointment->forceFill(['reminded_at' => now()])->save();
+            $appointment->forceFill(['reminded_at' => now()])->save();
             $count++;
         }
-        dd($count);
 
         $this->info("Lembretes enviados: {$count}");
 
