@@ -7,15 +7,19 @@ use App\Notifications\AppointmentReminderNotification;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 class SendAppointmentReminders extends Command
 {
     protected $signature = 'appointments:send-reminders';
 
-    protected $description = 'Dispara lembretes para clientes com agendamentos próximos';
+    protected $description = 'Dispara lembretes para clientes com agendamentos proximos';
 
     public function handle(): int
     {
+        $this->info('Iniciando verificacao de lembretes de agendamentos...');
+        Log::warning('Iniciando verificacao de lembretes de agendamentos...');
+
         $windowStart = Carbon::now()->setSecond(0);
         $windowEnd = $windowStart->copy()->addHour();
 
