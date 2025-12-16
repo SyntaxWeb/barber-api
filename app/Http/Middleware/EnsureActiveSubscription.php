@@ -28,14 +28,14 @@ class EnsureActiveSubscription
             ], 403);
         }
 
-        // $renewsAt = $company->subscription_renews_at ? Carbon::parse($company->subscription_renews_at) : null;
-        // if (
-        //     $company->subscription_status === 'ativo' &&
-        //     $renewsAt &&
-        //     $renewsAt->isPast()
-        // ) {
-        //     $company->forceFill(['subscription_status' => 'expirado'])->save();
-        // }
+        $renewsAt = $company->subscription_renews_at ? Carbon::parse($company->subscription_renews_at) : null;
+        if (
+            $company->subscription_status === 'ativo' &&
+            $renewsAt &&
+            $renewsAt->isPast()
+        ) {
+            $company->forceFill(['subscription_status' => 'expirado'])->save();
+        }
 
         if ($company->subscription_status !== 'ativo') {
             $message = 'Sua assinatura esta inativa. Atualize o plano para continuar usando o sistema.';
