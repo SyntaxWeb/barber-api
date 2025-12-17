@@ -105,6 +105,11 @@ class Company extends Model
         return $this->hasMany(SubscriptionOrder::class);
     }
 
+    public function feedbacks()
+    {
+        return $this->hasMany(Feedback::class);
+    }
+
     public static function generateUniqueSlug(string $name): string
     {
         $base = Str::slug($name) ?: Str::random(6);

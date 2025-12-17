@@ -23,6 +23,7 @@ Route::middleware('cors')->group(function () {
 Route::get('/services', [ServiceController::class, 'index']);
 Route::get('/availability', AvailabilityController::class);
 Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary']);
 Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class);
 });
 

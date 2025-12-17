@@ -111,6 +111,29 @@ class CompanyController extends Controller
         return response()->json($company);
     }
 
+    public function feedbackSummary(Company $company)
+    {
+        $feedbackQuery = $company->feedbacks();
+
+        $average = (clone $feedbackQuery)->avg('rating');
+        $count = (clone $feedbackQuery)->count();
+        $recent = (clone $feedbackQuery)->latest()->take(5)->get()->map(function ($feedback) {
+            return [
+                'id' => $feedback->id,
+                'client_name' => $feedback->client_name,
+                'rating' => (int) $feedback->rating,
+                'comment' => $feedback->comment,
+                'created_at' => optional($feedback->created_at)->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'average' => $average ? round((float) $average, 1) : null,
+            'count' => (int) $count,
+            'recent' => $recent,
+        ]);
+    }
+
     protected function ensureQrCode(?Company $company): void
     {
         if (!$company) {
