@@ -21,11 +21,16 @@ class Appointment extends Model
         'reminded_at',
         'user_id',
         'company_id',
+        'feedback_token',
+        'feedback_token_expires_at',
+        'feedback_requested_at',
     ];
 
     protected $casts = [
         'data' => 'date',
         'reminded_at' => 'datetime',
+        'feedback_token_expires_at' => 'datetime',
+        'feedback_requested_at' => 'datetime',
     ];
 
     public function service()
@@ -41,5 +46,10 @@ class Appointment extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function feedback()
+    {
+        return $this->hasOne(AppointmentFeedback::class);
     }
 }

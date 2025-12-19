@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreAppointmentFeedbackRequest;
 use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Jobs\SendAppointmentAlertJob;
@@ -17,12 +18,19 @@ use Illuminate\Support\Facades\Notification;
 
 class ClientAppointmentController extends Controller
 {
+    private const FEEDBACK_EXPIRATION_DAYS = 30;
+
     public function index(Request $request)
     {
         $user = $request->user('sanctum');
 
-        $query = Appointment::with(['service', 'company'])
+        if (!$user->company_id) {
+            return response()->json(['message' => 'Cliente não vinculado a uma empresa.'], 422);
+        }
+
+        $query = Appointment::with(['service', 'company', 'feedback'])
             ->where('user_id', $user->id)
+            ->where('company_id', $user->company_id)
             ->orderBy('data')
             ->orderBy('horario');
 
@@ -41,6 +49,10 @@ class ClientAppointmentController extends Controller
 
         if ($appointment->user_id !== $user->id) {
             abort(403, 'Agendamento não pertence ao cliente autenticado.');
+        }
+
+        if ($appointment->company_id !== $user->company_id) {
+            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
         }
 
         if ($appointment->status !== 'confirmado') {
@@ -78,7 +90,7 @@ class ClientAppointmentController extends Controller
         $this->notifyParticipants($appointment, 'updated');
         SendAppointmentAlertJob::dispatch($appointment->id, 'updated');
 
-        return new AppointmentResource($appointment->fresh(['service', 'company']));
+        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
     }
 
     public function cancel(Request $request, Appointment $appointment)
@@ -87,6 +99,10 @@ class ClientAppointmentController extends Controller
 
         if ($appointment->user_id !== $user->id) {
             abort(403, 'Agendamento não pertence ao cliente autenticado.');
+        }
+
+        if ($appointment->company_id !== $user->company_id) {
+            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
         }
 
         if ($appointment->status !== 'confirmado') {
@@ -105,7 +121,59 @@ class ClientAppointmentController extends Controller
         $this->notifyParticipants($appointment, 'cancelled');
         SendAppointmentAlertJob::dispatch($appointment->id, 'cancelled');
 
-        return new AppointmentResource($appointment->fresh(['service', 'company']));
+        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
+    }
+
+    public function submitFeedback(
+        StoreAppointmentFeedbackRequest $request,
+        Appointment $appointment
+    ) {
+        $user = $request->user('sanctum');
+
+        if ($appointment->user_id !== $user->id) {
+            abort(403, 'Agendamento não pertence ao cliente autenticado.');
+        }
+
+        if ($appointment->company_id !== $user->company_id) {
+            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
+        }
+
+        if ($appointment->status !== 'concluido') {
+            return response()->json(['message' => 'Feedback disponível somente após a conclusão do atendimento.'], 422);
+        }
+
+        $appointment->loadMissing('feedback');
+        if ($appointment->feedback) {
+            return response()->json(['message' => 'Feedback já enviado para este atendimento.'], 422);
+        }
+
+        $appointmentDateTime = Carbon::parse(
+            sprintf('%s %s', $appointment->data?->toDateString(), $appointment->horario ?? '00:00')
+        );
+
+        if ($appointmentDateTime->lt(now()->subDays(self::FEEDBACK_EXPIRATION_DAYS))) {
+            return response()->json([
+                'message' => 'Link expirado. Feedback disponível por tempo limitado.',
+            ], 422);
+        }
+
+        $payload = $request->validated() + ['submitted_at' => now()];
+
+        $appointment->feedback()->create($payload);
+
+        $appointment->forceFill([
+            'feedback_token' => null,
+            'feedback_token_expires_at' => null,
+        ])->save();
+
+        ActivityLogger::record($user, 'client.appointment.feedback_submitted', [
+            'appointment_id' => $appointment->id,
+            'service_rating' => $payload['service_rating'],
+            'professional_rating' => $payload['professional_rating'],
+            'scheduling_rating' => $payload['scheduling_rating'],
+        ], $request);
+
+        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
     }
 
     private function notifyParticipants(Appointment $appointment, string $action): void

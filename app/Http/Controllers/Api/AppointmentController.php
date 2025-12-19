@@ -7,6 +7,7 @@ use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Requests\UpdateAppointmentStatusRequest;
 use App\Http\Resources\AppointmentResource;
 use App\Jobs\SendAppointmentAlertJob;
+use App\Jobs\SendFeedbackInvitationJob;
 use App\Models\Appointment;
 use App\Models\Company;
 use App\Models\Service;
@@ -25,7 +26,7 @@ class AppointmentController extends Controller
         if (!$companyId) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
-        $query = Appointment::with(['service', 'company'])->where('company_id', $companyId);
+        $query = Appointment::with(['service', 'company', 'feedback'])->where('company_id', $companyId);
 
         if ($request->has('date')) {
             $query->whereDate('data', $request->date);
@@ -119,7 +120,7 @@ class AppointmentController extends Controller
                 'horario' => $existingAppointment->horario,
                 'service_id' => $existingAppointment->service_id,
             ], $request);
-            return new AppointmentResource($existingAppointment);
+            return new AppointmentResource($existingAppointment->load('service', 'company', 'feedback'));
         }
 
         $appointment = Appointment::create($data + [
@@ -136,7 +137,7 @@ class AppointmentController extends Controller
             'service_id' => $appointment->service_id,
         ], $request);
 
-        return new AppointmentResource($appointment);
+        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
     }
 
     public function update(StoreAppointmentRequest $request, Appointment $appointment, AvailabilityService $availability)
@@ -168,7 +169,7 @@ class AppointmentController extends Controller
             'service_id' => $data['service_id'],
         ], $request);
 
-        return new AppointmentResource($appointment->load('service', 'company'));
+        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
     }
 
     public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment)
@@ -177,12 +178,19 @@ class AppointmentController extends Controller
             abort(403, 'Agendamento não pertence à sua empresa.');
         }
 
-        $appointment->update(['status' => $request->validated()['status']]);
+        $previousStatus = $appointment->status;
+        $newStatus = $request->validated()['status'];
+        $appointment->update(['status' => $newStatus]);
         ActivityLogger::record($request->user('sanctum'), 'appointment.status_updated', [
             'appointment_id' => $appointment->id,
-            'status' => $request->validated()['status'],
+            'status' => $newStatus,
         ], $request);
-        return new AppointmentResource($appointment->load('service', 'company'));
+
+        if ($newStatus === 'concluido' && $previousStatus !== 'concluido') {
+            SendFeedbackInvitationJob::dispatch($appointment->id);
+        }
+
+        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
     }
 
     public function destroy(Request $request, Appointment $appointment)

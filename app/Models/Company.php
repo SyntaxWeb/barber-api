@@ -32,13 +32,20 @@ class Company extends Model
         'subscription_renews_at',
     ];
 
+    protected $with = [
+        'galleryPhotosRelation',
+    ];
+
     protected $appends = [
         'icon_url',
+        'gallery_photos',
+        'gallery_assets',
     ];
 
     protected $hidden = [
         'icon_path',
         'telegram_link_token',
+        'galleryPhotosRelation',
     ];
 
     protected $casts = [
@@ -93,6 +100,11 @@ class Company extends Model
     public function settings()
     {
         return $this->hasOne(Setting::class);
+    }
+
+    public function galleryPhotosRelation()
+    {
+        return $this->hasMany(CompanyPhoto::class)->orderBy('position')->orderBy('id');
     }
 
     public function blockedDays()
@@ -160,6 +172,24 @@ class Company extends Model
         $this->attributes['client_theme'] = json_encode(
             $this->mergeThemeValues($this->normalizeThemeInput($value), self::defaultClientTheme())
         );
+    }
+
+    public function getGalleryPhotosAttribute(): array
+    {
+        return $this->galleryPhotosRelation
+            ->map(fn (CompanyPhoto $photo) => $photo->url)
+            ->all();
+    }
+
+    public function getGalleryAssetsAttribute(): array
+    {
+        return $this->galleryPhotosRelation
+            ->map(fn (CompanyPhoto $photo) => [
+                'id' => $photo->id,
+                'path' => $photo->path,
+                'url' => $photo->url,
+            ])
+            ->all();
     }
 
     protected function decodeThemeValue($value): array

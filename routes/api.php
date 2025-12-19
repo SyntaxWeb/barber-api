@@ -17,12 +17,17 @@ use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
 use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
 use App\Http\Controllers\Api\SuperAdmin\ActivityLogController;
+use App\Http\Controllers\Api\PublicFeedbackController;
+use App\Http\Controllers\Api\CompanyReportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
 Route::get('/services', [ServiceController::class, 'index']);
 Route::get('/availability', AvailabilityController::class);
 Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']);
+Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary']);
+Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show']);
+Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit']);
 Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class);
 });
 
@@ -41,6 +46,7 @@ Route::prefix('clients')->middleware('cors')->group(function () {
         Route::get('/appointments', [ClientAppointmentController::class, 'index']);
         Route::put('/appointments/{appointment}', [ClientAppointmentController::class, 'update']);
         Route::post('/appointments/{appointment}/cancel', [ClientAppointmentController::class, 'cancel']);
+        Route::post('/appointments/{appointment}/feedback', [ClientAppointmentController::class, 'submitFeedback']);
     });
 });
 
@@ -57,6 +63,7 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
+    Route::get('/company/report', [CompanyReportController::class, 'show']);
 
     Route::get('/appointments', [AppointmentController::class, 'index']);
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update']);
