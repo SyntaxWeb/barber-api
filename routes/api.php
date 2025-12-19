@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
 use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
 use App\Http\Controllers\Api\SuperAdmin\ActivityLogController;
+use App\Http\Controllers\Api\SuperAdmin\SystemReportController;
 use App\Http\Controllers\Api\PublicFeedbackController;
 use App\Http\Controllers\Api\CompanyReportController;
 use Illuminate\Support\Facades\Route;
@@ -92,5 +93,7 @@ Route::prefix('admin')->middleware(['cors', 'auth:sanctum', 'abilities:admin'])-
     Route::get('/mercado-pago/subscriptions', [MercadoPagoController::class, 'index']);
     Route::post('/mercado-pago/plans/sync', [MercadoPagoController::class, 'syncPlans']);
     Route::get('/logs', [ActivityLogController::class, 'index']);
+    Route::get('/report', [SystemReportController::class, 'show']);
+    Route::get('/system/report', [SystemReportController::class, 'show']);
 });
 Route::post('/appointments', [AppointmentController::class, 'store'])->middleware(['cors', 'auth:sanctum']);
