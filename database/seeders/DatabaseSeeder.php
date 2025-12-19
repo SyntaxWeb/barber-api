@@ -90,6 +90,35 @@ class DatabaseSeeder extends Seeder
             ],
         ]);
 
+        if (\App\Models\Feedback::where('company_id', $company->id)->count() === 0) {
+            \App\Models\Feedback::insert([
+                [
+                    'company_id' => $company->id,
+                    'client_name' => 'João Silva',
+                    'rating' => 5,
+                    'comment' => 'Atendimento impecável e ambiente acolhedor. Voltarei com certeza!',
+                    'created_at' => now()->subDays(2),
+                    'updated_at' => now()->subDays(2),
+                ],
+                [
+                    'company_id' => $company->id,
+                    'client_name' => 'Mariana Costa',
+                    'rating' => 4,
+                    'comment' => 'Profissionais pontuais e muito educados. Poderia ter mais opções de horários.',
+                    'created_at' => now()->subDay(),
+                    'updated_at' => now()->subDay(),
+                ],
+                [
+                    'company_id' => $company->id,
+                    'client_name' => 'Pedro Oliveira',
+                    'rating' => 5,
+                    'comment' => 'Melhor corte que já fiz! Recomendo demais o trabalho do Carlos.',
+                    'created_at' => now()->subHours(8),
+                    'updated_at' => now()->subHours(8),
+                ],
+            ]);
+        }
+
         \App\Models\User::updateOrCreate(
             ['email' => $adminEmail],
             [

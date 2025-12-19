@@ -28,6 +28,7 @@ Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow']
 Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary']);
 Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show']);
 Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit']);
+
 Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class);
 });
 
