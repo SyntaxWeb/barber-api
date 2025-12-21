@@ -32,6 +32,7 @@ class CompanyController extends Controller
         $request->merge([
             'notify_via_email'     => filter_var($request->notify_via_email, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
             'notify_via_telegram'  => filter_var($request->notify_via_telegram, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+            'notify_via_whatsapp'  => filter_var($request->notify_via_whatsapp, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
         ]);
         
         $company = $user->company;
@@ -48,7 +49,9 @@ class CompanyController extends Controller
             'icone'                => 'nullable|image|max:2048',
             'notify_email'         => 'nullable|email',
             'notify_via_email'     => 'nullable|boolean',
+            'notify_whatsapp'      => 'nullable|string|max:32',
             'notify_via_telegram'  => 'nullable|boolean',
+            'notify_via_whatsapp'  => 'nullable|boolean',
             'gallery_photos'       => 'nullable|array|max:20',
             'gallery_photos.*'     => 'image|max:4096',
             'gallery_remove'       => 'nullable|array',
@@ -92,7 +95,9 @@ class CompanyController extends Controller
             'icon_path' => $data['icon_path'] ?? $company->icon_path,
             'notify_email' => $data['notify_email'] ?? $company->notify_email,
             'notify_via_email' => $request->boolean('notify_via_email'),
+            'notify_whatsapp' => $data['notify_whatsapp'] ?? $company->notify_whatsapp,
             'notify_via_telegram' => $request->boolean('notify_via_telegram'),
+            'notify_via_whatsapp' => $request->boolean('notify_via_whatsapp'),
         ];
 
         if (array_key_exists('dashboard_theme', $data)) {

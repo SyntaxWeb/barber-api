@@ -3,6 +3,9 @@
 namespace App\Jobs;
 
 use App\Models\Appointment;
+use App\Models\Company;
+use App\Models\NotificationLog;
+use App\Services\WhatsappService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -11,6 +14,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class SendAppointmentAlertJob implements ShouldQueue
 {
@@ -55,10 +59,20 @@ class SendAppointmentAlertJob implements ShouldQueue
         );
 
         if ($company->notify_via_email && $company->notify_email) {
-            Mail::raw($message, function ($mail) use ($company, $titles) {
-                $mail->to($company->notify_email)
-                    ->subject($titles['provider_subject']);
-            });
+            try {
+                Mail::raw($message, function ($mail) use ($company, $titles) {
+                    $mail->to($company->notify_email)
+                        ->subject($titles['provider_subject']);
+                });
+                $this->logNotification($company, 'email', $company->notify_email, $message);
+            } catch (Throwable $exception) {
+                Log::error('Falha ao enviar notificação por e-mail.', [
+                    'company_id' => $company->id,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                $this->logNotification($company, 'email', $company->notify_email, $message, 'failed', [], $exception->getMessage());
+            }
         }
 
         if ($appointment->user && $appointment->user->email) {
@@ -87,10 +101,11 @@ class SendAppointmentAlertJob implements ShouldQueue
             });
         }
 
-        $this->notifyTelegram($company->notify_telegram, $message, (bool) $company->notify_via_telegram);
+        $this->notifyTelegram($company, $company->notify_telegram, $message, (bool) $company->notify_via_telegram);
+        $this->notifyWhatsapp($company, $message);
     }
 
-    protected function notifyTelegram(?string $companyChatId, string $message, bool $enabled): void
+    protected function notifyTelegram(Company $company, ?string $companyChatId, string $message, bool $enabled): void
     {
         if (!$enabled) {
             return;
@@ -110,13 +125,56 @@ class SendAppointmentAlertJob implements ShouldQueue
                 'text' => $message,
                 'parse_mode' => 'Markdown',
             ]);
-        } catch (\Throwable $exception) {
+            $this->logNotification($company, 'telegram', $chatId, $message);
+        } catch (Throwable $exception) {
             Log::error('Falha ao enviar notificação para o Telegram', [
                 'chat_id' => $chatId,
                 'error' => $exception->getMessage(),
             ]);
+            $this->logNotification($company, 'telegram', $chatId, $message, 'failed', [], $exception->getMessage());
         }
     }
+
+    protected function notifyWhatsapp(Company $company, string $message): void
+    {
+        if (!$company->notify_via_whatsapp || !$company->notify_whatsapp) {
+            return;
+        }
+
+        try {
+            $this->whatsappService()->sendMessage($company, $company->notify_whatsapp, $message);
+            $this->logNotification($company, 'whatsapp', $company->notify_whatsapp, $message);
+        } catch (Throwable $exception) {
+            Log::error('Falha ao enviar notificação para o WhatsApp', [
+                'company_id' => $company->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            $this->logNotification($company, 'whatsapp', $company->notify_whatsapp, $message, 'failed', [], $exception->getMessage());
+        }
+    }
+
+    protected function whatsappService(): WhatsappService
+    {
+        return app(WhatsappService::class);
+    }
+
+    protected function logNotification(Company $company, string $channel, ?string $recipient, string $message, string $status = 'sent', array $meta = [], ?string $error = null): void
+    {
+        NotificationLog::create([
+            'company_id' => $company->id,
+            'channel' => $channel,
+            'recipient' => $recipient,
+            'message' => $message,
+            'status' => $status,
+            'meta' => array_merge([
+                'appointment_id' => $this->appointmentId,
+                'action' => $this->action,
+            ], $meta),
+            'error' => $error,
+        ]);
+    }
+
     protected function resolveTitles(): array
     {
         return match ($this->action) {

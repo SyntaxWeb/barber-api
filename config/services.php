@@ -45,4 +45,12 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
     ],
 
+    'whatsapp' => [
+        'base_url' => env('WPPCONNECT_URL', 'http://wppconnect:21465'),
+        'secret' => env('WPPCONNECT_SECRET'),
+        'webhook' => env('WPPCONNECT_WEBHOOK'),
+        'user' => env('WPPCONNECT_USER'),
+        'password' => env('WPPCONNECT_PASSWORD'),
+    ],
+
 ];

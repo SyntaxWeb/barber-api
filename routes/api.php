@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TelegramSetupController;
+use App\Http\Controllers\Api\WhatsappSetupController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\MercadoPagoWebhookController;
 use App\Http\Controllers\Api\ProfileController;
@@ -81,6 +82,9 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::post('/company/telegram/link', [TelegramSetupController::class, 'createLink']);
     Route::post('/company/telegram/link/verify', [TelegramSetupController::class, 'verifyLink']);
+    Route::get('/company/whatsapp/session', [WhatsappSetupController::class, 'status']);
+    Route::post('/company/whatsapp/session', [WhatsappSetupController::class, 'start']);
+    Route::delete('/company/whatsapp/session', [WhatsappSetupController::class, 'logout']);
     Route::post('/profile', [ProfileController::class, 'updateProvider']);
     Route::get('/subscription', [SubscriptionController::class, 'show'])->withoutMiddleware('subscription.active');
     Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])->withoutMiddleware('subscription.active');
