@@ -14,17 +14,24 @@ class AvailabilityController extends Controller
         $request->validate([
             'date' => 'required|date',
             'company' => 'nullable|string',
+            'service_id' => 'nullable|integer',
+            'appointment_id' => 'nullable|integer',
         ]);
 
         return response()->json([
-            'horarios' => $availability->horariosDisponiveis($request->date, $this->resolveCompanyId($request)),
+            'horarios' => $availability->horariosDisponiveis(
+                $request->date,
+                $this->resolveCompanyId($request),
+                $request->integer('service_id') ?: null,
+                $request->integer('appointment_id') ?: null
+            ),
         ]);
     }
 
     private function resolveCompanyId(Request $request): int
     {
-        if ($request->user()?->company_id) {
-            return $request->user()->company_id;
+        if ($request->user('sanctum')?->company_id) {
+            return $request->user('sanctum')->company_id;
         }
 
         if ($slug = $request->query('company')) {

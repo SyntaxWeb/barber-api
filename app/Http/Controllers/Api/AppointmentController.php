@@ -88,7 +88,13 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Complete o perfil do cliente antes de agendar.'], 422);
         }
 
-        if (!in_array($data['horario'], $availability->horariosDisponiveis($data['data'], $companyId), true)) {
+        if (
+            !in_array(
+                $data['horario'],
+                $availability->horariosDisponiveis($data['data'], $companyId, (int) $data['service_id']),
+                true
+            )
+        ) {
             return response()->json(['message' => 'Horário indisponível'], 422);
         }
 
@@ -155,9 +161,23 @@ class AppointmentController extends Controller
         }
         unset($data['company_slug']);
 
-        $isSameSlot = $appointment->data->toDateString() === $data['data'] && $appointment->horario === $data['horario'];
+        $isSameSlot = $appointment->data->toDateString() === $data['data']
+            && $appointment->horario === $data['horario']
+            && $appointment->service_id === $data['service_id'];
 
-        if (!$isSameSlot && !in_array($data['horario'], $availability->horariosDisponiveis($data['data'], $appointment->company_id), true)) {
+        if (
+            !$isSameSlot &&
+            !in_array(
+                $data['horario'],
+                $availability->horariosDisponiveis(
+                    $data['data'],
+                    $appointment->company_id,
+                    (int) $data['service_id'],
+                    $appointment->id
+                ),
+                true
+            )
+        ) {
             return response()->json(['message' => 'Horário indisponível'], 422);
         }
 

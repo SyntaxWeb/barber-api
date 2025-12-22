@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Appointment;
 use App\Models\BlockedDay;
 use App\Models\Setting;
+use App\Models\Service;
 use Carbon\Carbon;
 
 class AvailabilityService
@@ -12,7 +13,12 @@ class AvailabilityService
     /**
      * Retorna os horários disponíveis para uma data, considerando bloqueios e agendamentos ativos.
      */
-    public function horariosDisponiveis(string $data, int $companyId): array
+    public function horariosDisponiveis(
+        string $data,
+        int $companyId,
+        ?int $serviceId = null,
+        ?int $ignoreAppointmentId = null
+    ): array
     {
         $settings = Setting::where('company_id', $companyId)->firstOrFail();
 
@@ -25,35 +31,70 @@ class AvailabilityService
             return [];
         }
 
-        [$horaInicio, $minInicio] = explode(':', $daySchedule['start']);
-        [$horaFim, $minFim] = explode(':', $daySchedule['end']);
         $intervalo = $settings->intervalo_minutos;
 
-        $ocupados = Appointment::where('company_id', $companyId)
+        $serviceDuration = $intervalo;
+        if ($serviceId) {
+            $service = Service::where('company_id', $companyId)->find($serviceId);
+            if (!$service) {
+                return [];
+            }
+            $serviceDuration = max(1, (int) $service->duracao_minutos);
+        }
+
+        $appointmentsQuery = Appointment::where('appointments.company_id', $companyId)
             ->whereDate('data', $data)
-            ->where('status', '!=', 'cancelado')
-            ->pluck('horario')
-            ->toArray();
+            ->where('status', '!=', 'cancelado');
+
+        if ($ignoreAppointmentId) {
+            $appointmentsQuery->where('id', '!=', $ignoreAppointmentId);
+        }
+
+        $appointments = $appointmentsQuery
+            ->leftJoin('services', 'appointments.service_id', '=', 'services.id')
+            ->get(['appointments.horario', 'services.duracao_minutos']);
+
+        $ocupados = [];
+        foreach ($appointments as $appointment) {
+            $start = $this->timeToMinutes($appointment->horario);
+            $duration = (int) ($appointment->duracao_minutos ?: $intervalo);
+            if ($duration <= 0) {
+                $duration = $intervalo;
+            }
+            $ocupados[] = [$start, $start + $duration];
+        }
+
+        $inicioDia = $this->timeToMinutes($daySchedule['start']);
+        $fimDia = $this->timeToMinutes($daySchedule['end']);
+        $almocoInicio = $daySchedule['lunch_enabled'] ? $this->timeToMinutes($daySchedule['lunch_start']) : null;
+        $almocoFim = $daySchedule['lunch_enabled'] ? $this->timeToMinutes($daySchedule['lunch_end']) : null;
 
         $slots = [];
-        for ($h = (int) $horaInicio, $m = (int) $minInicio; $h < (int) $horaFim || ($h === (int) $horaFim && $m <= (int) $minFim); ) {
-            $horarioStr = sprintf('%02d:%02d', $h, $m);
-            if ($daySchedule['lunch_enabled'] && $this->timeToMinutes($horarioStr) >= $this->timeToMinutes($daySchedule['lunch_start']) && $this->timeToMinutes($horarioStr) < $this->timeToMinutes($daySchedule['lunch_end'])) {
-                $m += $intervalo;
-                if ($m >= 60) {
-                    $h += intdiv($m, 60);
-                    $m %= 60;
-                }
+        for ($slot = $inicioDia; $slot <= $fimDia; $slot += $intervalo) {
+            $slotFim = $slot + $serviceDuration;
+            if ($slotFim > $fimDia) {
                 continue;
             }
-            if (!in_array($horarioStr, $ocupados, true)) {
-                $slots[] = $horarioStr;
+            if (
+                $daySchedule['lunch_enabled'] &&
+                $almocoInicio !== null &&
+                $almocoFim !== null &&
+                $slotFim > $almocoInicio &&
+                $slot < $almocoFim
+            ) {
+                continue;
             }
-            $m += $intervalo;
-            if ($m >= 60) {
-                $h += intdiv($m, 60);
-                $m %= 60;
+            $conflito = false;
+            foreach ($ocupados as [$ocupadoInicio, $ocupadoFim]) {
+                if ($slotFim > $ocupadoInicio && $slot < $ocupadoFim) {
+                    $conflito = true;
+                    break;
+                }
             }
+            if ($conflito) {
+                continue;
+            }
+            $slots[] = sprintf('%02d:%02d', intdiv($slot, 60), $slot % 60);
         }
 
         return $slots;

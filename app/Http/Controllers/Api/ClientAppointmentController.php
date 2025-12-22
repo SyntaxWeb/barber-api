@@ -71,11 +71,22 @@ class ClientAppointmentController extends Controller
         $service = Service::where('company_id', $appointment->company_id)->findOrFail($data['service_id']);
         $data['preco'] = $service->preco;
 
-        $isSameSlot = $appointment->data->toDateString() === $data['data'] && $appointment->horario === $data['horario'];
+        $isSameSlot = $appointment->data->toDateString() === $data['data']
+            && $appointment->horario === $data['horario']
+            && $appointment->service_id === $data['service_id'];
 
         if (
             !$isSameSlot &&
-            !in_array($data['horario'], $availability->horariosDisponiveis($data['data'], $appointment->company_id), true)
+            !in_array(
+                $data['horario'],
+                $availability->horariosDisponiveis(
+                    $data['data'],
+                    $appointment->company_id,
+                    (int) $data['service_id'],
+                    $appointment->id
+                ),
+                true
+            )
         ) {
             return response()->json(['message' => 'Horário indisponível'], 422);
         }
