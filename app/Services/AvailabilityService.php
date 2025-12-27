@@ -20,27 +20,50 @@ class AvailabilityService
         ?int $ignoreAppointmentId = null
     ): array
     {
+        $availability = $this->buildAvailability($data, $companyId, $serviceId, $ignoreAppointmentId);
+        return $availability['horarios'];
+    }
+
+    /**
+     * Retorna horários disponíveis agrupados por hora.
+     */
+    public function horariosDisponiveisPorHora(
+        string $data,
+        int $companyId,
+        ?int $serviceId = null,
+        ?int $ignoreAppointmentId = null
+    ): array
+    {
+        return $this->buildAvailability($data, $companyId, $serviceId, $ignoreAppointmentId);
+    }
+
+    private function buildAvailability(
+        string $data,
+        int $companyId,
+        ?int $serviceId,
+        ?int $ignoreAppointmentId
+    ): array
+    {
         $settings = Setting::where('company_id', $companyId)->firstOrFail();
 
         if (BlockedDay::where('company_id', $companyId)->whereDate('data', $data)->exists()) {
-            return [];
+            return $this->emptyAvailability();
         }
 
         $daySchedule = $this->resolveDaySchedule($settings, $data);
         if (!$daySchedule['enabled']) {
-            return [];
+            return $this->emptyAvailability();
         }
 
-        $intervalo = $settings->intervalo_minutos;
-
-        $serviceDuration = $intervalo;
-        if ($serviceId) {
-            $service = Service::where('company_id', $companyId)->find($serviceId);
-            if (!$service) {
-                return [];
-            }
-            $serviceDuration = max(1, (int) $service->duracao_minutos);
+        if (!$serviceId) {
+            return $this->emptyAvailability();
         }
+
+        $service = Service::where('company_id', $companyId)->find($serviceId);
+        if (!$service) {
+            return $this->emptyAvailability();
+        }
+        $serviceDuration = max(1, (int) $service->duracao_minutos);
 
         $appointmentsQuery = Appointment::where('appointments.company_id', $companyId)
             ->whereDate('data', $data)
@@ -57,24 +80,41 @@ class AvailabilityService
         $ocupados = [];
         foreach ($appointments as $appointment) {
             $start = $this->timeToMinutes($appointment->horario);
-            $duration = (int) ($appointment->duracao_minutos ?: $intervalo);
-            if ($duration <= 0) {
-                $duration = $intervalo;
-            }
+            $duration = max(1, (int) $appointment->duracao_minutos);
             $ocupados[] = [$start, $start + $duration];
         }
 
         $inicioDia = $this->timeToMinutes($daySchedule['start']);
         $fimDia = $this->timeToMinutes($daySchedule['end']);
+        if ($fimDia <= $inicioDia) {
+            return $this->emptyAvailability();
+        }
+
         $almocoInicio = $daySchedule['lunch_enabled'] ? $this->timeToMinutes($daySchedule['lunch_start']) : null;
         $almocoFim = $daySchedule['lunch_enabled'] ? $this->timeToMinutes($daySchedule['lunch_end']) : null;
 
+        $ultimoInicio = $fimDia - $serviceDuration;
+        if ($ultimoInicio < $inicioDia) {
+            return $this->emptyAvailability();
+        }
+
+        $minutoAtual = null;
+        try {
+            $agora = Carbon::now();
+            if ($agora->toDateString() === Carbon::parse($data)->toDateString()) {
+                $minutoAtual = ($agora->hour * 60) + $agora->minute;
+            }
+        } catch (\Throwable $e) {
+            $minutoAtual = null;
+        }
+
         $slots = [];
-        for ($slot = $inicioDia; $slot <= $fimDia; $slot += $intervalo) {
-            $slotFim = $slot + $serviceDuration;
-            if ($slotFim > $fimDia) {
+        $minutosPorHora = [];
+        for ($slot = $inicioDia; $slot <= $ultimoInicio; $slot++) {
+            if ($minutoAtual !== null && $slot < $minutoAtual) {
                 continue;
             }
+            $slotFim = $slot + $serviceDuration;
             if (
                 $daySchedule['lunch_enabled'] &&
                 $almocoInicio !== null &&
@@ -94,10 +134,39 @@ class AvailabilityService
             if ($conflito) {
                 continue;
             }
-            $slots[] = sprintf('%02d:%02d', intdiv($slot, 60), $slot % 60);
+
+            $hora = sprintf('%02d', intdiv($slot, 60));
+            $minuto = sprintf('%02d', $slot % 60);
+            $slots[] = sprintf('%s:%s', $hora, $minuto);
+            if (!array_key_exists($hora, $minutosPorHora)) {
+                $minutosPorHora[$hora] = [];
+            }
+            $minutosPorHora[$hora][$minuto] = true;
         }
 
-        return $slots;
+        $horas = array_keys($minutosPorHora);
+        sort($horas);
+        $minutosPorHoraOrdenado = [];
+        foreach ($horas as $hora) {
+            $minutos = array_keys($minutosPorHora[$hora]);
+            sort($minutos);
+            $minutosPorHoraOrdenado[$hora] = $minutos;
+        }
+
+        return [
+            'horarios' => $slots,
+            'horas' => $horas,
+            'minutos_por_hora' => $minutosPorHoraOrdenado,
+        ];
+    }
+
+    private function emptyAvailability(): array
+    {
+        return [
+            'horarios' => [],
+            'horas' => [],
+            'minutos_por_hora' => [],
+        ];
     }
 
     private function resolveDaySchedule(Setting $settings, string $date): array

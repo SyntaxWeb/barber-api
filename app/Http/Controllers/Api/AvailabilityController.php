@@ -18,14 +18,18 @@ class AvailabilityController extends Controller
             'appointment_id' => 'nullable|integer',
         ]);
 
-        return response()->json([
-            'horarios' => $availability->horariosDisponiveis(
-                $request->date,
-                $this->resolveCompanyId($request),
-                $request->integer('service_id') ?: null,
-                $request->integer('appointment_id') ?: null
-            ),
-        ]);
+        $companyId = $this->resolveCompanyId($request);
+        $serviceId = $request->integer('service_id') ?: null;
+        $appointmentId = $request->integer('appointment_id') ?: null;
+
+        $disponibilidade = $availability->horariosDisponiveisPorHora(
+            $request->date,
+            $companyId,
+            $serviceId,
+            $appointmentId
+        );
+
+        return response()->json($disponibilidade);
     }
 
     private function resolveCompanyId(Request $request): int
