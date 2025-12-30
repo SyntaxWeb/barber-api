@@ -53,7 +53,7 @@ class CompanyController extends Controller
             'notify_via_telegram'  => 'nullable|boolean',
             'notify_via_whatsapp'  => 'nullable|boolean',
             'gallery_photos'       => 'nullable|array|max:20',
-            'gallery_photos.*'     => 'image|max:4096',
+            'gallery_photos.*'     => 'image|max:10240',
             'gallery_remove'       => 'nullable|array',
             'gallery_remove.*'     => 'string',
             'dashboard_theme'             => ['nullable', 'array'],
