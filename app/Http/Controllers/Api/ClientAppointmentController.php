@@ -68,8 +68,13 @@ class ClientAppointmentController extends Controller
         $data = $request->validated();
         unset($data['company_slug']);
 
-        $service = Service::where('company_id', $appointment->company_id)->findOrFail($data['service_id']);
-        $data['preco'] = $service->preco;
+        $service = Service::where('company_id', $appointment->company_id)->find($data['service_id']);
+        if (!$service || (!$service->ativo && $appointment->service_id !== (int) $data['service_id'])) {
+            return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
+        }
+        if ($service->ativo) {
+            $data['preco'] = $service->preco;
+        }
 
         $isSameSlot = $appointment->data->toDateString() === $data['data']
             && $appointment->horario === $data['horario']

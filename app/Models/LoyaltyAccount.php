@@ -5,24 +5,32 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Service extends Model
+class LoyaltyAccount extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'nome',
-        'preco',
-        'duracao_minutos',
         'company_id',
-        'ativo',
+        'user_id',
+        'points_balance',
     ];
 
     protected $casts = [
-        'ativo' => 'boolean',
+        'points_balance' => 'integer',
     ];
 
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function transactions()
+    {
+        return $this->hasMany(LoyaltyTransaction::class);
     }
 }

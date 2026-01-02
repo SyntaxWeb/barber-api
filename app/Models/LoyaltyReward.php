@@ -5,20 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Service extends Model
+class LoyaltyReward extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'nome',
-        'preco',
-        'duracao_minutos',
         'company_id',
-        'ativo',
+        'name',
+        'description',
+        'points_cost',
+        'active',
     ];
 
     protected $casts = [
-        'ativo' => 'boolean',
+        'active' => 'boolean',
+        'points_cost' => 'integer',
     ];
 
     public function company()

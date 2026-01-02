@@ -21,6 +21,9 @@ use App\Http\Controllers\Api\SuperAdmin\ActivityLogController;
 use App\Http\Controllers\Api\SuperAdmin\SystemReportController;
 use App\Http\Controllers\Api\PublicFeedbackController;
 use App\Http\Controllers\Api\CompanyReportController;
+use App\Http\Controllers\Api\ClientLoyaltyController;
+use App\Http\Controllers\Api\LoyaltyRewardController;
+use App\Http\Controllers\Api\LoyaltySettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
@@ -50,6 +53,8 @@ Route::prefix('clients')->middleware('cors')->group(function () {
         Route::put('/appointments/{appointment}', [ClientAppointmentController::class, 'update']);
         Route::post('/appointments/{appointment}/cancel', [ClientAppointmentController::class, 'cancel']);
         Route::post('/appointments/{appointment}/feedback', [ClientAppointmentController::class, 'submitFeedback']);
+        Route::get('/loyalty', [ClientLoyaltyController::class, 'show']);
+        Route::post('/loyalty/redeem', [ClientLoyaltyController::class, 'redeem']);
     });
 });
 
@@ -66,6 +71,12 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
+    Route::get('/loyalty/settings', [LoyaltySettingsController::class, 'show']);
+    Route::put('/loyalty/settings', [LoyaltySettingsController::class, 'update']);
+    Route::get('/loyalty/rewards', [LoyaltyRewardController::class, 'index']);
+    Route::post('/loyalty/rewards', [LoyaltyRewardController::class, 'store']);
+    Route::put('/loyalty/rewards/{loyaltyReward}', [LoyaltyRewardController::class, 'update']);
+    Route::delete('/loyalty/rewards/{loyaltyReward}', [LoyaltyRewardController::class, 'destroy']);
     Route::get('/company/report', [CompanyReportController::class, 'show']);
 
     Route::get('/appointments', [AppointmentController::class, 'index']);
@@ -74,6 +85,7 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
     Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy']);
 
     Route::get('/clients', [ClientController::class, 'index']);
+    Route::get('/clients/{client}/history', [ClientController::class, 'history']);
     Route::post('/clients', [ClientController::class, 'store']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);

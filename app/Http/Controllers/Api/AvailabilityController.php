@@ -45,12 +45,6 @@ class AvailabilityController extends Controller
             }
             abort(404, 'Empresa não encontrada.');
         }
-
-        $fallback = Company::first();
-        if (!$fallback) {
-            abort(404, 'Nenhuma empresa configurada.');
-        }
-
-        return $fallback->id;
+        abort(400, 'Empresa não informada.');
     }
 }

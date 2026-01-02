@@ -59,7 +59,9 @@ class AvailabilityService
             return $this->emptyAvailability();
         }
 
-        $service = Service::where('company_id', $companyId)->find($serviceId);
+        $service = Service::where('company_id', $companyId)
+            ->where('ativo', true)
+            ->find($serviceId);
         if (!$service) {
             return $this->emptyAvailability();
         }

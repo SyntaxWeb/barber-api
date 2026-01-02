@@ -15,7 +15,9 @@ class ServiceController extends Controller
     public function index(Request $request)
     {
         $companyId = $this->resolveCompanyId($request);
-        return ServiceResource::collection(Service::where('company_id', $companyId)->get());
+        return ServiceResource::collection(
+            Service::where('company_id', $companyId)->where('ativo', true)->get()
+        );
     }
 
     public function store(ServiceRequest $request)
@@ -60,10 +62,13 @@ class ServiceController extends Controller
             abort(403, 'Serviço não pertence à sua empresa.');
         }
 
-        $service->delete();
-        ActivityLogger::record($user, 'service.deleted', [
+        if ($service->ativo) {
+            $service->update(['ativo' => false]);
+        }
+        ActivityLogger::record($user, 'service.inactivated', [
             'service_id' => $service->id,
             'nome' => $service->nome,
+            'ativo' => false,
         ], $request);
         return response()->noContent();
     }
@@ -83,12 +88,6 @@ class ServiceController extends Controller
             }
             abort(404, 'Empresa não encontrada.');
         }
-
-        $fallback = Company::first();
-        if (!$fallback) {
-            abort(404, 'Nenhuma empresa configurada.');
-        }
-
-        return $fallback->id;
+        abort(400, 'Empresa não informada.');
     }
 }

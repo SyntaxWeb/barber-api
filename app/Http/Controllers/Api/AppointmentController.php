@@ -14,6 +14,7 @@ use App\Models\Service;
 use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
 use App\Services\ActivityLogger;
+use App\Services\LoyaltyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
@@ -88,6 +89,13 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Complete o perfil do cliente antes de agendar.'], 422);
         }
 
+        $service = Service::where('company_id', $companyId)
+            ->where('ativo', true)
+            ->find($data['service_id']);
+        if (!$service) {
+            return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
+        }
+
         if (
             !in_array(
                 $data['horario'],
@@ -98,7 +106,6 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Horário indisponível'], 422);
         }
 
-        $service = Service::where('company_id', $companyId)->findOrFail($data['service_id']);
         $data['preco'] = $service->preco;
 
         unset($data['company_slug']);
@@ -155,8 +162,10 @@ class AppointmentController extends Controller
         $data = $request->validated();
         if (!array_key_exists('preco', $data)) {
             $service = Service::where('company_id', $request->user('sanctum')?->company_id)->find($data['service_id']);
-            if ($service) {
+            if ($service && $service->ativo) {
                 $data['preco'] = $service->preco;
+            } elseif ($appointment->service_id !== (int) $data['service_id']) {
+                return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
             }
         }
         unset($data['company_slug']);
@@ -192,7 +201,7 @@ class AppointmentController extends Controller
         return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
     }
 
-    public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment)
+    public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment, LoyaltyService $loyalty)
     {
         if ($appointment->company_id !== $request->user('sanctum')?->company_id) {
             abort(403, 'Agendamento não pertence à sua empresa.');
@@ -206,8 +215,13 @@ class AppointmentController extends Controller
             'status' => $newStatus,
         ], $request);
 
+        if ($previousStatus === 'concluido' && $newStatus !== 'concluido') {
+            $loyalty->revokeForAppointment($appointment);
+        }
+
         if ($newStatus === 'concluido' && $previousStatus !== 'concluido') {
             SendFeedbackInvitationJob::dispatch($appointment->id);
+            $loyalty->awardForAppointment($appointment);
         }
 
         return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
@@ -236,7 +250,7 @@ class AppointmentController extends Controller
             return $company->id;
         }
 
-        return Company::first()?->id;
+        return null;
     }
 
     private function notifyCompanyUsers(Appointment $appointment): void
