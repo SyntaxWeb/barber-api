@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\RefreshTokenController;
 use App\Models\Company;
 use App\Models\User;
+use App\Models\RefreshToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -35,11 +37,14 @@ class AuthController extends Controller
             ? ['admin', 'provider']
             : ['provider'];
         $token = $user->createToken('provider_token', $abilities)->plainTextToken;
+        $refresh = RefreshTokenController::issueRefreshToken($user, $abilities);
 
         $user->load('company');
 
         return response()->json([
             'token' => $token,
+            'refresh_token' => $refresh['token'],
+            'refresh_expires_at' => $refresh['expires_at'],
             'user' => $user,
         ]);
     }
@@ -104,9 +109,12 @@ class AuthController extends Controller
         $user->load('company');
 
         $token = $user->createToken('provider_token', ['provider'])->plainTextToken;
+        $refresh = RefreshTokenController::issueRefreshToken($user, ['provider']);
 
         return response()->json([
             'token' => $token,
+            'refresh_token' => $refresh['token'],
+            'refresh_expires_at' => $refresh['expires_at'],
             'user' => $user,
         ], 201);
     }
@@ -114,6 +122,7 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();
+        RefreshToken::where('user_id', $request->user()->id)->delete();
         return response()->json(['message' => 'Logout realizado']);
     }
 

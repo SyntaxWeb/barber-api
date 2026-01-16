@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\RefreshTokenController;
 use App\Models\Company;
 use App\Models\User;
+use App\Models\RefreshToken;
 use App\Services\GoogleClientVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -50,9 +52,12 @@ class ClientAuthController extends Controller
         ]);
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;
+        $refresh = RefreshTokenController::issueRefreshToken($client, ['client']);
 
         return response()->json([
             'token' => $token,
+            'refresh_token' => $refresh['token'],
+            'refresh_expires_at' => $refresh['expires_at'],
             'user' => $client,
         ], 201);
     }
@@ -90,9 +95,12 @@ class ClientAuthController extends Controller
         }
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;
+        $refresh = RefreshTokenController::issueRefreshToken($client, ['client']);
 
         return response()->json([
             'token' => $token,
+            'refresh_token' => $refresh['token'],
+            'refresh_expires_at' => $refresh['expires_at'],
             'user' => $client,
         ]);
     }
@@ -100,6 +108,7 @@ class ClientAuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()?->delete();
+        RefreshToken::where('user_id', $request->user()->id)->delete();
 
         return response()->json(['message' => 'Sessão encerrada.']);
     }
@@ -153,9 +162,12 @@ class ClientAuthController extends Controller
         }
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;
+        $refresh = RefreshTokenController::issueRefreshToken($client, ['client']);
 
         return response()->json([
             'token' => $token,
+            'refresh_token' => $refresh['token'],
+            'refresh_expires_at' => $refresh['expires_at'],
             'user' => $client,
         ]);
     }

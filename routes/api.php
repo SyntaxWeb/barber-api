@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ClientAuthController;
 use App\Http\Controllers\Api\ClientAppointmentController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\RefreshTokenController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TelegramSetupController;
@@ -38,12 +39,14 @@ Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class);
 });
 
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/refresh', [RefreshTokenController::class, 'refresh']);
 Route::middleware('cors')->post('/register', [AuthController::class, 'register']);
 
 Route::prefix('clients')->middleware('cors')->group(function () {
     Route::post('/register', [ClientAuthController::class, 'register']);
     Route::post('/login', [ClientAuthController::class, 'login']);
     Route::post('/login/google', [ClientAuthController::class, 'loginWithGoogle']);
+    Route::post('/refresh', [RefreshTokenController::class, 'refresh']);
 
     Route::middleware(['auth:sanctum', 'abilities:client'])->group(function () {
         Route::post('/logout', [ClientAuthController::class, 'logout']);

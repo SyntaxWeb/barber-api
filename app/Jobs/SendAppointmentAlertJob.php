@@ -42,6 +42,7 @@ class SendAppointmentAlertJob implements ShouldQueue
         $message = sprintf(
             "💈 *%s* 💈\n\n" .
                 "👤 *Cliente:* %s\n" .
+                "📱 *Contato:* %s\n" .
                 "📅 *Data:* %s\n" .
                 "⏰ *Horário:* %s\n" .
                 "💈 *Serviço:* %s\n" .
@@ -50,6 +51,7 @@ class SendAppointmentAlertJob implements ShouldQueue
                 "%s",
             $titles['provider_title'],
             $appointment->cliente,
+            $appointment->telefone,
             $dateText,
             $appointment->horario,
             $serviceName,
