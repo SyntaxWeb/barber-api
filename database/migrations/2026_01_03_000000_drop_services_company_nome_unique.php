@@ -16,7 +16,7 @@ return new class extends Migration
         }
 
         Schema::table('services', function (Blueprint $table) {
-            $table->dropUnique('services_company_nome_unique');
+            // $table->dropUnique('services_company_nome_unique');
         });
     }
 
