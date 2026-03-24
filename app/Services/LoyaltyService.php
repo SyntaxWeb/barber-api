@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Appointment;
 use App\Models\LoyaltyAccount;
+use App\Models\LoyaltyRedemption;
 use App\Models\LoyaltyReward;
 use App\Models\LoyaltySetting;
 use App\Models\LoyaltyTransaction;
@@ -133,7 +134,7 @@ class LoyaltyService
         });
     }
 
-    public function redeemReward(LoyaltyReward $reward, User $user): LoyaltyAccount
+    public function redeemReward(LoyaltyReward $reward, User $user): array
     {
         $account = LoyaltyAccount::firstOrCreate(
             [
@@ -150,15 +151,45 @@ class LoyaltyService
             abort(422, 'Saldo insuficiente para resgatar esta recompensa.');
         }
 
-        $this->applyTransaction($account, [
-            'company_id' => $reward->company_id,
-            'user_id' => $user->id,
-            'type' => self::TYPE_REDEEM,
-            'points' => -$reward->points_cost,
-            'reason' => sprintf('Resgate: %s', $reward->name),
-        ]);
+        $redemption = null;
 
-        return $account->fresh();
+        DB::transaction(function () use ($account, $reward, $user, &$redemption) {
+            $this->applyTransaction($account, [
+                'company_id' => $reward->company_id,
+                'user_id' => $user->id,
+                'type' => self::TYPE_REDEEM,
+                'points' => -$reward->points_cost,
+                'reason' => sprintf('Resgate: %s', $reward->name),
+            ]);
+
+            if ($reward->grants_free_appointment) {
+                $redemption = LoyaltyRedemption::create([
+                    'company_id' => $reward->company_id,
+                    'user_id' => $user->id,
+                    'reward_id' => $reward->id,
+                    'status' => 'pending',
+                ]);
+            }
+        });
+
+        return [
+            'account' => $account->fresh(),
+            'redemption' => $redemption?->fresh('reward'),
+        ];
+    }
+
+    public function restorePendingRedemptionFromAppointment(Appointment $appointment): void
+    {
+        $appointment->loadMissing('loyaltyRedemption');
+
+        if (!$appointment->loyaltyRedemption) {
+            return;
+        }
+
+        $appointment->loyaltyRedemption->update([
+            'appointment_id' => null,
+            'status' => 'pending',
+        ]);
     }
 
     public function syncExpiredPoints(LoyaltyAccount $account, LoyaltySetting $settings): void

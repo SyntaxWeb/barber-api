@@ -10,6 +10,7 @@ use App\Jobs\SendAppointmentAlertJob;
 use App\Jobs\SendFeedbackInvitationJob;
 use App\Models\Appointment;
 use App\Models\Company;
+use App\Models\LoyaltyRedemption;
 use App\Models\Service;
 use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
@@ -21,13 +22,29 @@ use Illuminate\Support\Facades\Validator;
 
 class AppointmentController extends Controller
 {
+    private function resolveRequestedServiceIds(array $data): array
+    {
+        $serviceIds = collect($data['service_ids'] ?? ($data['service_id'] ? [$data['service_id']] : []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($serviceIds)) {
+            abort(422, 'Selecione pelo menos um serviço.');
+        }
+
+        return $serviceIds;
+    }
+
     public function index(Request $request)
     {
         $companyId = $request->user('sanctum')?->company_id;
         if (!$companyId) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
-        $query = Appointment::with(['service', 'company', 'feedback'])->where('company_id', $companyId);
+        $query = Appointment::with(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'])->where('company_id', $companyId);
 
         if ($request->has('date')) {
             $query->whereDate('data', $request->date);
@@ -49,10 +66,13 @@ class AppointmentController extends Controller
             'telefone'      => 'sometimes|required|string|max:30',
             'data'          => 'required|date|after_or_equal:today',
             'horario'       => 'required|string',
-            'service_id'    => 'required|exists:services,id',
+            'service_id'    => 'nullable|exists:services,id',
+            'service_ids'   => 'nullable|array|min:1',
+            'service_ids.*' => 'integer|exists:services,id',
             'preco'         => 'nullable|numeric|min:0',
             'observacoes'   => 'nullable|string',
             'company_slug'  => 'nullable|string|exists:companies,slug',
+            'loyalty_redemption_id' => 'nullable|integer|exists:loyalty_redemptions,id',
         ]);
 
         if ($validator->fails()) {
@@ -89,26 +109,49 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Complete o perfil do cliente antes de agendar.'], 422);
         }
 
-        $service = Service::where('company_id', $companyId)
+        $serviceIds = $this->resolveRequestedServiceIds($data);
+        $services = Service::where('company_id', $companyId)
             ->where('ativo', true)
-            ->find($data['service_id']);
-        if (!$service) {
+            ->whereIn('id', $serviceIds)
+            ->get();
+        if ($services->count() !== count($serviceIds)) {
             return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
         }
 
         if (
             !in_array(
                 $data['horario'],
-                $availability->horariosDisponiveis($data['data'], $companyId, (int) $data['service_id']),
+                $availability->horariosDisponiveis($data['data'], $companyId, $serviceIds),
                 true
             )
         ) {
             return response()->json(['message' => 'Horário indisponível'], 422);
         }
 
-        $data['preco'] = $service->preco;
+        $data['service_id'] = $serviceIds[0];
+        $data['preco'] = (float) $services->sum('preco');
 
-        unset($data['company_slug']);
+        $redemption = null;
+        if (!empty($data['loyalty_redemption_id'])) {
+            $redemption = LoyaltyRedemption::with('reward')
+                ->where('id', $data['loyalty_redemption_id'])
+                ->where('company_id', $companyId)
+                ->where('user_id', $user->id)
+                ->where('status', 'pending')
+                ->first();
+
+            if (!$redemption) {
+                return response()->json(['message' => 'Resgate de fidelidade indisponível para uso.'], 422);
+            }
+
+            if (!$redemption->reward || !$redemption->reward->grants_free_appointment) {
+                return response()->json(['message' => 'Esta recompensa não libera agendamento gratuito.'], 422);
+            }
+
+            $data['preco'] = 0;
+        }
+
+        unset($data['company_slug'], $data['loyalty_redemption_id']);
 
         $existingAppointment = Appointment::where('company_id', $companyId)
             ->whereDate('data', $data['data'])
@@ -125,6 +168,13 @@ class AppointmentController extends Controller
                 'user_id' => $user->id,
             ]);
 
+            if ($redemption) {
+                $redemption->update([
+                    'appointment_id' => $existingAppointment->id,
+                    'status' => 'applied',
+                ]);
+            }
+
             $existingAppointment->load('service', 'company', 'company.users');
             $this->notifyCompanyUsers($existingAppointment);
             ActivityLogger::record($user, 'appointment.reactivated', [
@@ -133,13 +183,22 @@ class AppointmentController extends Controller
                 'horario' => $existingAppointment->horario,
                 'service_id' => $existingAppointment->service_id,
             ], $request);
-            return new AppointmentResource($existingAppointment->load('service', 'company', 'feedback'));
+            $existingAppointment->services()->sync($serviceIds);
+            return new AppointmentResource($existingAppointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
         }
 
         $appointment = Appointment::create($data + [
             'user_id' => $user->id,
             'company_id' => $companyId,
         ]);
+        $appointment->services()->sync($serviceIds);
+
+        if ($redemption) {
+            $redemption->update([
+                'appointment_id' => $appointment->id,
+                'status' => 'applied',
+            ]);
+        }
 
         $appointment->load('service', 'company', 'company.users');
         $this->notifyCompanyUsers($appointment);
@@ -150,7 +209,7 @@ class AppointmentController extends Controller
             'service_id' => $appointment->service_id,
         ], $request);
 
-        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
     }
 
     public function update(StoreAppointmentRequest $request, Appointment $appointment, AvailabilityService $availability)
@@ -160,19 +219,30 @@ class AppointmentController extends Controller
         }
 
         $data = $request->validated();
+        $appointment->loadMissing('loyaltyRedemption');
+        $serviceIds = $this->resolveRequestedServiceIds($data);
+        $services = Service::where('company_id', $request->user('sanctum')?->company_id)
+            ->whereIn('id', $serviceIds)
+            ->get();
+        if ($services->count() !== count($serviceIds) || $services->contains(fn ($service) => !$service->ativo)) {
+            return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
+        }
+
         if (!array_key_exists('preco', $data)) {
-            $service = Service::where('company_id', $request->user('sanctum')?->company_id)->find($data['service_id']);
-            if ($service && $service->ativo) {
-                $data['preco'] = $service->preco;
-            } elseif ($appointment->service_id !== (int) $data['service_id']) {
+            if ($appointment->loyaltyRedemption && $appointment->loyaltyRedemption->status === 'applied') {
+                $data['preco'] = 0;
+            } elseif ($services->contains(fn ($service) => !$service->ativo)) {
                 return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
+            } else {
+                $data['preco'] = (float) $services->sum('preco');
             }
         }
+        $data['service_id'] = $serviceIds[0];
         unset($data['company_slug']);
 
         $isSameSlot = $appointment->data->toDateString() === $data['data']
             && $appointment->horario === $data['horario']
-            && $appointment->service_id === $data['service_id'];
+            && collect($appointment->services()->pluck('services.id')->all())->map(fn ($id) => (int) $id)->values()->all() === $serviceIds;
 
         if (
             !$isSameSlot &&
@@ -181,7 +251,7 @@ class AppointmentController extends Controller
                 $availability->horariosDisponiveis(
                     $data['data'],
                     $appointment->company_id,
-                    (int) $data['service_id'],
+                    $serviceIds,
                     $appointment->id
                 ),
                 true
@@ -191,6 +261,7 @@ class AppointmentController extends Controller
         }
 
         $appointment->update($data);
+        $appointment->services()->sync($serviceIds);
         ActivityLogger::record($request->user('sanctum'), 'appointment.updated', [
             'appointment_id' => $appointment->id,
             'data' => $data['data'],
@@ -198,7 +269,7 @@ class AppointmentController extends Controller
             'service_id' => $data['service_id'],
         ], $request);
 
-        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
     }
 
     public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment, LoyaltyService $loyalty)
@@ -219,12 +290,16 @@ class AppointmentController extends Controller
             $loyalty->revokeForAppointment($appointment);
         }
 
+        if ($newStatus === 'cancelado' && $previousStatus !== 'cancelado') {
+            $loyalty->restorePendingRedemptionFromAppointment($appointment);
+        }
+
         if ($newStatus === 'concluido' && $previousStatus !== 'concluido') {
             SendFeedbackInvitationJob::dispatch($appointment->id);
             $loyalty->awardForAppointment($appointment);
         }
 
-        return new AppointmentResource($appointment->load('service', 'company', 'feedback'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
     }
 
     public function destroy(Request $request, Appointment $appointment)
@@ -233,6 +308,7 @@ class AppointmentController extends Controller
             abort(403, 'Agendamento não pertence à sua empresa.');
         }
 
+        app(LoyaltyService::class)->restorePendingRedemptionFromAppointment($appointment);
         $appointment->delete();
         ActivityLogger::record($request->user('sanctum'), 'appointment.deleted', [
             'appointment_id' => $appointment->id,

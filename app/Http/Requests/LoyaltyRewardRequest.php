@@ -19,8 +19,11 @@ class LoyaltyRewardRequest extends FormRequest
         return [
             'name' => [$required, 'string', 'max:255'],
             'description' => [$isCreate ? 'nullable' : 'sometimes', 'string', 'max:1000'],
+            'image' => [$isCreate ? 'nullable' : 'sometimes', 'image', 'max:4096'],
+            'remove_image' => [$isCreate ? 'nullable' : 'sometimes', 'boolean'],
             'points_cost' => [$required, 'integer', 'min:1'],
             'active' => [$isCreate ? 'nullable' : 'sometimes', 'boolean'],
+            'grants_free_appointment' => [$isCreate ? 'nullable' : 'sometimes', 'boolean'],
         ];
     }
 }

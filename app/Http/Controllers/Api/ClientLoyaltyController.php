@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\LoyaltyAccount;
+use App\Models\LoyaltyRedemption;
 use App\Models\LoyaltyReward;
 use App\Models\LoyaltyTransaction;
+use App\Notifications\LoyaltyRewardRedeemedNotification;
 use App\Services\LoyaltyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 
 class ClientLoyaltyController extends Controller
 {
@@ -46,10 +49,32 @@ class ClientLoyaltyController extends Controller
                 'created_at',
             ]);
 
+        $pendingRedemptions = LoyaltyRedemption::with('reward')
+            ->where('company_id', $user->company_id)
+            ->where('user_id', $user->id)
+            ->where('status', 'pending')
+            ->orderByDesc('created_at')
+            ->get();
+
         return response()->json([
             'points_balance' => $account->points_balance,
             'rewards' => $rewards,
             'transactions' => $transactions,
+            'pending_redemptions' => $pendingRedemptions->map(function (LoyaltyRedemption $redemption) {
+                return [
+                    'id' => $redemption->id,
+                    'status' => $redemption->status,
+                    'created_at' => $redemption->created_at?->toIso8601String(),
+                    'reward' => [
+                        'id' => $redemption->reward?->id,
+                        'name' => $redemption->reward?->name,
+                        'description' => $redemption->reward?->description,
+                        'image_url' => $redemption->reward?->image_url,
+                        'points_cost' => $redemption->reward?->points_cost,
+                        'grants_free_appointment' => (bool) $redemption->reward?->grants_free_appointment,
+                    ],
+                ];
+            })->values(),
         ]);
     }
 
@@ -69,10 +94,26 @@ class ClientLoyaltyController extends Controller
             ->where('active', true)
             ->firstOrFail();
 
-        $account = $loyalty->redeemReward($reward, $user);
+        $result = $loyalty->redeemReward($reward, $user);
+        $account = $result['account'];
+        $redemption = $result['redemption'];
+
+        $providers = $user->company?->users()->where('role', 'provider')->get() ?? collect();
+        if ($providers->isNotEmpty()) {
+            Notification::send($providers, new LoyaltyRewardRedeemedNotification($user, $reward, $redemption?->id));
+        }
 
         return response()->json([
             'points_balance' => $account->points_balance,
+            'redemption' => $redemption ? [
+                'id' => $redemption->id,
+                'status' => $redemption->status,
+                'reward' => [
+                    'id' => $redemption->reward?->id,
+                    'name' => $redemption->reward?->name,
+                    'grants_free_appointment' => (bool) $redemption->reward?->grants_free_appointment,
+                ],
+            ] : null,
         ]);
     }
 }

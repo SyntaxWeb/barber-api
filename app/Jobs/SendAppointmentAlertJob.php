@@ -97,10 +97,26 @@ class SendAppointmentAlertJob implements ShouldQueue
                 $titles['client_footer']
             );
 
-            Mail::raw($clientMessage, function ($mail) use ($appointment, $titles) {
-                $mail->to($appointment->user->email)
-                    ->subject($titles['client_subject']);
-            });
+            try {
+                Mail::raw($clientMessage, function ($mail) use ($appointment, $titles) {
+                    $mail->to($appointment->user->email)
+                        ->subject($titles['client_subject']);
+                });
+
+                $this->logNotification($company, 'email', $appointment->user->email, $clientMessage, 'sent', [
+                    'audience' => 'client',
+                ]);
+            } catch (Throwable $exception) {
+                Log::error('Falha ao enviar notificação por e-mail para o cliente.', [
+                    'company_id' => $company->id,
+                    'user_id' => $appointment->user->id,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                $this->logNotification($company, 'email', $appointment->user->email, $clientMessage, 'failed', [
+                    'audience' => 'client',
+                ], $exception->getMessage());
+            }
         }
 
         $this->notifyTelegram($company, $company->notify_telegram, $message, (bool) $company->notify_via_telegram);

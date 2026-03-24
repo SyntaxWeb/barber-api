@@ -15,17 +15,18 @@ class AvailabilityController extends Controller
             'date' => 'required|date',
             'company' => 'nullable|string',
             'service_id' => 'nullable|integer',
+            'service_ids' => 'nullable',
             'appointment_id' => 'nullable|integer',
         ]);
 
         $companyId = $this->resolveCompanyId($request);
-        $serviceId = $request->integer('service_id') ?: null;
+        $serviceIds = $this->resolveServiceIds($request);
         $appointmentId = $request->integer('appointment_id') ?: null;
 
         $disponibilidade = $availability->horariosDisponiveisPorHora(
             $request->date,
             $companyId,
-            $serviceId,
+            $serviceIds,
             $appointmentId
         );
 
@@ -46,5 +47,31 @@ class AvailabilityController extends Controller
             abort(404, 'Empresa não encontrada.');
         }
         abort(400, 'Empresa não informada.');
+    }
+
+    private function resolveServiceIds(Request $request): array
+    {
+        $raw = $request->query('service_ids');
+
+        if (is_string($raw) && trim($raw) !== '') {
+            return collect(explode(',', $raw))
+                ->map(fn ($value) => (int) trim($value))
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        if (is_array($raw)) {
+            return collect($raw)
+                ->map(fn ($value) => (int) $value)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        $single = $request->integer('service_id');
+        return $single ? [$single] : [];
     }
 }

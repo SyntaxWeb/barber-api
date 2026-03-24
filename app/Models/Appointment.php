@@ -38,6 +38,11 @@ class Appointment extends Model
         return $this->belongsTo(Service::class);
     }
 
+    public function services()
+    {
+        return $this->belongsToMany(Service::class, 'appointment_service')->withTimestamps();
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -51,5 +56,10 @@ class Appointment extends Model
     public function feedback()
     {
         return $this->hasOne(AppointmentFeedback::class);
+    }
+
+    public function loyaltyRedemption()
+    {
+        return $this->hasOne(LoyaltyRedemption::class);
     }
 }

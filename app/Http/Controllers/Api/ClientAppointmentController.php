@@ -12,6 +12,7 @@ use App\Models\Service;
 use App\Notifications\AppointmentChangedNotification;
 use App\Services\AvailabilityService;
 use App\Services\ActivityLogger;
+use App\Services\LoyaltyService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
@@ -19,6 +20,22 @@ use Illuminate\Support\Facades\Notification;
 class ClientAppointmentController extends Controller
 {
     private const FEEDBACK_EXPIRATION_DAYS = 30;
+
+    private function resolveRequestedServiceIds(array $data): array
+    {
+        $serviceIds = collect($data['service_ids'] ?? ($data['service_id'] ? [$data['service_id']] : []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($serviceIds)) {
+            abort(422, 'Selecione pelo menos um serviço.');
+        }
+
+        return $serviceIds;
+    }
 
     public function index(Request $request)
     {
@@ -28,7 +45,7 @@ class ClientAppointmentController extends Controller
             return response()->json(['message' => 'Cliente não vinculado a uma empresa.'], 422);
         }
 
-        $query = Appointment::with(['service', 'company', 'feedback'])
+        $query = Appointment::with(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'])
             ->where('user_id', $user->id)
             ->where('company_id', $user->company_id)
             ->orderBy('data')
@@ -68,17 +85,25 @@ class ClientAppointmentController extends Controller
         $data = $request->validated();
         unset($data['company_slug']);
 
-        $service = Service::where('company_id', $appointment->company_id)->find($data['service_id']);
-        if (!$service || (!$service->ativo && $appointment->service_id !== (int) $data['service_id'])) {
+        $appointment->loadMissing('loyaltyRedemption');
+
+        $serviceIds = $this->resolveRequestedServiceIds($data);
+        $services = Service::where('company_id', $appointment->company_id)
+            ->whereIn('id', $serviceIds)
+            ->get();
+        if ($services->count() !== count($serviceIds) || $services->contains(fn ($service) => !$service->ativo)) {
             return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
         }
-        if ($service->ativo) {
-            $data['preco'] = $service->preco;
+        if ($appointment->loyaltyRedemption && $appointment->loyaltyRedemption->status === 'applied') {
+            $data['preco'] = 0;
+        } else {
+            $data['preco'] = (float) $services->sum('preco');
         }
+        $data['service_id'] = $serviceIds[0];
 
         $isSameSlot = $appointment->data->toDateString() === $data['data']
             && $appointment->horario === $data['horario']
-            && $appointment->service_id === $data['service_id'];
+            && collect($appointment->services()->pluck('services.id')->all())->map(fn ($id) => (int) $id)->values()->all() === $serviceIds;
 
         if (
             !$isSameSlot &&
@@ -87,7 +112,7 @@ class ClientAppointmentController extends Controller
                 $availability->horariosDisponiveis(
                     $data['data'],
                     $appointment->company_id,
-                    (int) $data['service_id'],
+                    $serviceIds,
                     $appointment->id
                 ),
                 true
@@ -97,6 +122,7 @@ class ClientAppointmentController extends Controller
         }
 
         $appointment->update($data);
+        $appointment->services()->sync($serviceIds);
         ActivityLogger::record($user, 'client.appointment.updated', [
             'appointment_id' => $appointment->id,
             'data' => $data['data'],
@@ -106,10 +132,10 @@ class ClientAppointmentController extends Controller
         $this->notifyParticipants($appointment, 'updated');
         SendAppointmentAlertJob::dispatch($appointment->id, 'updated');
 
-        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
+        return new AppointmentResource($appointment->fresh(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward']));
     }
 
-    public function cancel(Request $request, Appointment $appointment)
+    public function cancel(Request $request, Appointment $appointment, LoyaltyService $loyalty)
     {
         $user = $request->user('sanctum');
 
@@ -130,6 +156,7 @@ class ClientAppointmentController extends Controller
             return response()->json(['message' => 'Cancelamento permitido somente até 1 hora antes.'], 422);
         }
 
+        $loyalty->restorePendingRedemptionFromAppointment($appointment);
         $appointment->update(['status' => 'cancelado']);
         ActivityLogger::record($user, 'client.appointment.cancelled', [
             'appointment_id' => $appointment->id,
@@ -137,7 +164,7 @@ class ClientAppointmentController extends Controller
         $this->notifyParticipants($appointment, 'cancelled');
         SendAppointmentAlertJob::dispatch($appointment->id, 'cancelled');
 
-        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
+        return new AppointmentResource($appointment->fresh(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward']));
     }
 
     public function submitFeedback(
@@ -189,7 +216,7 @@ class ClientAppointmentController extends Controller
             'scheduling_rating' => $payload['scheduling_rating'],
         ], $request);
 
-        return new AppointmentResource($appointment->fresh(['service', 'company', 'feedback']));
+        return new AppointmentResource($appointment->fresh(['service', 'services', 'company', 'feedback']));
     }
 
     private function notifyParticipants(Appointment $appointment, string $action): void

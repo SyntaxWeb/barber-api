@@ -16,7 +16,7 @@ class AvailabilityService
     public function horariosDisponiveis(
         string $data,
         int $companyId,
-        ?int $serviceId = null,
+        array|int|null $serviceId = null,
         ?int $ignoreAppointmentId = null
     ): array
     {
@@ -30,7 +30,7 @@ class AvailabilityService
     public function horariosDisponiveisPorHora(
         string $data,
         int $companyId,
-        ?int $serviceId = null,
+        array|int|null $serviceId = null,
         ?int $ignoreAppointmentId = null
     ): array
     {
@@ -40,7 +40,7 @@ class AvailabilityService
     private function buildAvailability(
         string $data,
         int $companyId,
-        ?int $serviceId,
+        array|int|null $serviceId,
         ?int $ignoreAppointmentId
     ): array
     {
@@ -55,17 +55,25 @@ class AvailabilityService
             return $this->emptyAvailability();
         }
 
-        if (!$serviceId) {
+        $serviceIds = collect(is_array($serviceId) ? $serviceId : [$serviceId])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($serviceIds)) {
             return $this->emptyAvailability();
         }
 
-        $service = Service::where('company_id', $companyId)
+        $services = Service::where('company_id', $companyId)
             ->where('ativo', true)
-            ->find($serviceId);
-        if (!$service) {
+            ->whereIn('id', $serviceIds)
+            ->get();
+        if ($services->count() !== count($serviceIds)) {
             return $this->emptyAvailability();
         }
-        $serviceDuration = max(1, (int) $service->duracao_minutos);
+        $serviceDuration = max(1, (int) $services->sum('duracao_minutos'));
 
         $appointmentsQuery = Appointment::where('appointments.company_id', $companyId)
             ->whereDate('data', $data)
@@ -76,13 +84,17 @@ class AvailabilityService
         }
 
         $appointments = $appointmentsQuery
-            ->leftJoin('services', 'appointments.service_id', '=', 'services.id')
-            ->get(['appointments.horario', 'services.duracao_minutos']);
+            ->with(['services:id,duracao_minutos', 'service:id,duracao_minutos'])
+            ->get();
 
         $ocupados = [];
         foreach ($appointments as $appointment) {
             $start = $this->timeToMinutes($appointment->horario);
-            $duration = max(1, (int) $appointment->duracao_minutos);
+            $duration = max(1, (int) (
+                $appointment->services->sum('duracao_minutos')
+                ?: $appointment->service?->duracao_minutos
+                ?: 0
+            ));
             $ocupados[] = [$start, $start + $duration];
         }
 

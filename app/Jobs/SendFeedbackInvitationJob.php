@@ -8,8 +8,10 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Throwable;
 
 class SendFeedbackInvitationJob implements ShouldQueue
 {
@@ -42,14 +44,23 @@ class SendFeedbackInvitationJob implements ShouldQueue
         $baseUrl = rtrim(config('app.frontend_url', config('app.url')), '/');
         $feedbackLink = $baseUrl . '/cliente/feedback?token=' . $token;
 
-        Mail::send('emails.feedback-invitation', [
-            'clientName'   => $clientName,
-            'companyName'  => $companyName,
-            'serviceName'  => $serviceName,
-            'feedbackLink' => $feedbackLink,
-        ], function ($mail) use ($appointment, $companyName) {
-            $mail->to($appointment->user->email)
-                ->subject("Como foi seu atendimento na {$companyName}?");
-        });
+        try {
+            Mail::send('emails.feedback-invitation', [
+                'clientName'   => $clientName,
+                'companyName'  => $companyName,
+                'serviceName'  => $serviceName,
+                'feedbackLink' => $feedbackLink,
+            ], function ($mail) use ($appointment, $companyName) {
+                $mail->to($appointment->user->email)
+                    ->subject("Como foi seu atendimento na {$companyName}?");
+            });
+        } catch (Throwable $exception) {
+            Log::error('Falha ao enviar convite de feedback por e-mail.', [
+                'appointment_id' => $appointment->id,
+                'user_id' => $appointment->user->id,
+                'email' => $appointment->user->email,
+                'error' => $exception->getMessage(),
+            ]);
+        }
     }
 }

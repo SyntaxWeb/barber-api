@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ClientResource;
 use App\Models\Appointment;
 use App\Models\LoyaltyAccount;
+use App\Models\LoyaltyReward;
 use App\Models\LoyaltyTransaction;
 use App\Services\LoyaltyService;
 use App\Models\User;
@@ -87,11 +88,29 @@ class ClientController extends Controller
                 'created_at',
             ]);
 
+        $availableRewards = LoyaltyReward::query()
+            ->where('company_id', $provider->company_id)
+            ->where('active', true)
+            ->orderBy('points_cost')
+            ->get(['id', 'name', 'description', 'points_cost'])
+            ->map(function (LoyaltyReward $reward) use ($account) {
+                return [
+                    'id' => $reward->id,
+                    'name' => $reward->name,
+                    'description' => $reward->description,
+                    'image_url' => $reward->image_url,
+                    'points_cost' => $reward->points_cost,
+                    'available' => $account->points_balance >= $reward->points_cost,
+                ];
+            })
+            ->values();
+
         return response()->json([
             'client' => new ClientResource($client),
             'loyalty' => [
                 'points_balance' => $account->points_balance,
                 'transactions' => $transactions,
+                'available_rewards' => $availableRewards,
             ],
             'appointments' => $appointments,
         ]);

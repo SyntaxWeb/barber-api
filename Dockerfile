@@ -1,13 +1,19 @@
-FROM php:8.2-fpm
+FROM ghcr.io/syntaxweb/php-base:8.3-alpine AS builder
 
-# Instalar extensões do PHP
-RUN apt-get update && apt-get install -y \
-    curl zip unzip git libonig-dev libxml2-dev libzip-dev libpng-dev \
-    && docker-php-ext-install pdo pdo_mysql mbstring xml zip gd \
-    && pecl install redis \
-    && docker-php-ext-enable redis
+WORKDIR /var/www/html
 
-# Instalar Composer
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts
 
-WORKDIR /var/www
+COPY . .
+
+RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/testing storage/framework/views storage/logs bootstrap/cache \
+    && composer dump-autoload --optimize --classmap-authoritative --no-scripts
+
+FROM ghcr.io/syntaxweb/php-base:8.3-alpine
+
+WORKDIR /var/www/html
+
+COPY --from=builder --chown=appuser:appuser /var/www/html /var/www/html
+
+EXPOSE 8000
