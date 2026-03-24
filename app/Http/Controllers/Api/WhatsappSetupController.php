@@ -35,7 +35,6 @@ class WhatsappSetupController extends Controller
 
             return response()->json([
                 'message' => 'Não foi possível consultar o status do WhatsApp.',
-                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -61,7 +60,6 @@ class WhatsappSetupController extends Controller
 
             return response()->json([
                 'message' => 'Não foi possível iniciar a sessão do WhatsApp.',
-                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -85,7 +83,6 @@ class WhatsappSetupController extends Controller
 
             return response()->json([
                 'message' => 'Não foi possível desconectar a sessão do WhatsApp.',
-                'error' => $exception->getMessage(),
             ], 422);
         }
     }

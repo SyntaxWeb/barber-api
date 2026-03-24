@@ -15,19 +15,26 @@ return [
     |
     */
 
-    'paths' => ['*'],
+    'paths' => ['api/*'],
 
-    'allowed_methods' => ['*'],
-    
-    'allowed_origins' => ['*'],
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 
-    // 'allowed_origins' => array_filter(array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:4001,http://127.0.0.1:4001,https://barberapp.syntaxweb.com.br')))),
+    'allowed_origins' => array_filter(array_map(
+        'trim',
+        explode(
+            ',',
+            env(
+                'CORS_ALLOWED_ORIGINS',
+                'http://localhost:4001,http://127.0.0.1:4001,https://barberapp.syntaxweb.com.br,https://api-barberapp.syntaxweb.com.br,https://syntaxatendimento.com.br,https://api-atendimento.syntaxatendimento.com.br'
+            )
+        )
+    )),
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['*'],
+    'allowed_headers' => ['Accept', 'Authorization', 'Content-Type', 'Origin', 'X-Requested-With'],
 
-    'exposed_headers' => ['*'],
+    'exposed_headers' => [],
 
     'max_age' => 0,
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\CompanyPublicResource;
 use App\Models\AppointmentFeedback;
 use App\Models\Company;
 use App\Models\CompanyPhoto;
@@ -145,7 +146,7 @@ class CompanyController extends Controller
     public function publicShow(Company $company)
     {
         $this->ensureQrCode($company);
-        return response()->json($company);
+        return new CompanyPublicResource($company);
     }
 
     public function feedbackSummary(Company $company)

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreAppointmentFeedbackRequest;
-use App\Http\Resources\AppointmentResource;
+use App\Http\Resources\PublicFeedbackAppointmentResource;
 use App\Models\Appointment;
 use Illuminate\Http\Request;
 
@@ -14,7 +14,7 @@ class PublicFeedbackController extends Controller
     {
         $appointment = $this->resolveAppointmentByToken($token);
 
-        return new AppointmentResource($appointment->load(['company', 'service', 'feedback']));
+        return new PublicFeedbackAppointmentResource($appointment->load(['company', 'service', 'feedback']));
     }
 
     public function submit(StoreAppointmentFeedbackRequest $request, string $token)
@@ -36,7 +36,9 @@ class PublicFeedbackController extends Controller
             'feedback_token_expires_at' => null,
         ])->save();
 
-        return (new AppointmentResource($appointment->load(['company', 'service', 'feedback'])))->response()->setStatusCode(201);
+        return (new PublicFeedbackAppointmentResource($appointment->load(['company', 'service', 'feedback'])))
+            ->response()
+            ->setStatusCode(201);
     }
 
     private function resolveAppointmentByToken(string $token): Appointment
