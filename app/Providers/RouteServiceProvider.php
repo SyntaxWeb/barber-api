@@ -32,8 +32,24 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()->id);
         });
 
-        RateLimiter::for('public-client-links', function (Request $request) {
-            return Limit::perMinute(240)->by($request->ip());
+        RateLimiter::for('public-client-read', function (Request $request) {
+            return Limit::perMinute(600)->by($request->ip());
+        });
+
+        RateLimiter::for('public-company-read', function (Request $request) {
+            $companyKey = (string) $request->route('company');
+
+            return Limit::perMinute(1200)->by(sprintf('%s|%s', $request->ip(), $companyKey));
+        });
+
+        RateLimiter::for('public-feedback-submit', function (Request $request) {
+            $token = (string) $request->route('token');
+
+            return Limit::perMinute(30)->by(sprintf('%s|%s', $request->ip(), $token));
+        });
+
+        RateLimiter::for('public-webhook', function (Request $request) {
+            return Limit::perMinute(300)->by($request->ip());
         });
 
         $this->routes(function () {

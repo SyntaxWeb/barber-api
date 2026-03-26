@@ -28,14 +28,14 @@ use App\Http\Controllers\Api\LoyaltySettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('cors')->group(function () {
-Route::get('/services', [ServiceController::class, 'index'])->middleware('throttle:public-client-links');
-Route::get('/availability', AvailabilityController::class)->middleware('throttle:public-client-links');
-Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow'])->middleware('throttle:public-client-links');
-Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary'])->middleware('throttle:public-client-links');
-Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show'])->middleware('throttle:public-client-links');
-Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'])->middleware('throttle:public-client-links');
+Route::get('/services', [ServiceController::class, 'index'])->middleware('throttle:public-client-read');
+Route::get('/availability', AvailabilityController::class)->middleware('throttle:public-client-read');
+Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow'])->middleware('throttle:public-company-read');
+Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary'])->middleware('throttle:public-company-read');
+Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show'])->middleware('throttle:public-client-read');
+Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'])->middleware('throttle:public-feedback-submit');
 
-Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class)->middleware('throttle:public-client-links');
+Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class)->middleware('throttle:public-webhook');
 });
 
 Route::post('/login', [AuthController::class, 'login']);
