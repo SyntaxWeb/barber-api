@@ -109,6 +109,16 @@ class Company extends Model
         return $this->hasMany(Appointment::class);
     }
 
+    public function products()
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    public function sales()
+    {
+        return $this->hasMany(Sale::class);
+    }
+
     public function settings()
     {
         return $this->hasOne(Setting::class);

@@ -44,7 +44,7 @@ class AppointmentController extends Controller
         if (!$companyId) {
             abort(403, 'Usuário não associado a uma empresa.');
         }
-        $query = Appointment::with(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'])->where('company_id', $companyId);
+        $query = Appointment::with(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'])->where('company_id', $companyId);
 
         if ($request->has('date')) {
             $query->whereDate('data', $request->date);
@@ -184,10 +184,11 @@ class AppointmentController extends Controller
                 'service_id' => $existingAppointment->service_id,
             ], $request);
             $existingAppointment->services()->sync($serviceIds);
-            return new AppointmentResource($existingAppointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
+            return new AppointmentResource($existingAppointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'));
         }
 
         $appointment = Appointment::create($data + [
+            'status' => 'confirmado',
             'user_id' => $user->id,
             'company_id' => $companyId,
         ]);
@@ -209,7 +210,7 @@ class AppointmentController extends Controller
             'service_id' => $appointment->service_id,
         ], $request);
 
-        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'));
     }
 
     public function update(StoreAppointmentRequest $request, Appointment $appointment, AvailabilityService $availability)
@@ -269,7 +270,7 @@ class AppointmentController extends Controller
             'service_id' => $data['service_id'],
         ], $request);
 
-        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'));
     }
 
     public function status(UpdateAppointmentStatusRequest $request, Appointment $appointment, LoyaltyService $loyalty)
@@ -299,7 +300,7 @@ class AppointmentController extends Controller
             $loyalty->awardForAppointment($appointment);
         }
 
-        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'));
+        return new AppointmentResource($appointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'));
     }
 
     public function destroy(Request $request, Appointment $appointment)

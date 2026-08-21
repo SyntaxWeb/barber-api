@@ -62,4 +62,9 @@ class Appointment extends Model
     {
         return $this->hasOne(LoyaltyRedemption::class);
     }
+
+    public function sale()
+    {
+        return $this->hasOne(Sale::class);
+    }
 }

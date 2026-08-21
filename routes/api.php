@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\RefreshTokenController;
 use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TelegramSetupController;
 use App\Http\Controllers\Api\WhatsappSetupController;
@@ -68,6 +70,19 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
     Route::post('/services', [ServiceController::class, 'store']);
     Route::put('/services/{service}', [ServiceController::class, 'update']);
     Route::delete('/services/{service}', [ServiceController::class, 'destroy']);
+
+    Route::get('/products', [ProductController::class, 'index']);
+    Route::post('/products', [ProductController::class, 'store']);
+    Route::put('/products/{product}', [ProductController::class, 'update']);
+    Route::delete('/products/{product}', [ProductController::class, 'destroy']);
+    Route::post('/products/{product}/stock', [ProductController::class, 'adjustStock']);
+    Route::get('/products/{product}/movements', [ProductController::class, 'movements']);
+
+    Route::get('/sales', [SaleController::class, 'index']);
+    Route::post('/sales/direct/close', [SaleController::class, 'closeDirectSale']);
+    Route::get('/sales/{sale}', [SaleController::class, 'show']);
+    Route::get('/appointments/{appointment}/sale', [SaleController::class, 'appointmentSale']);
+    Route::post('/appointments/{appointment}/sale/close', [SaleController::class, 'closeAppointmentSale']);
 
     Route::get('/company', [CompanyController::class, 'show']);
     Route::post('/company', [CompanyController::class, 'update']);

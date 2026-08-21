@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\AppointmentFeedback;
+use App\Models\Sale;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CompanyReportController extends Controller
 {
@@ -20,6 +22,7 @@ class CompanyReportController extends Controller
         }
 
         $baseQuery = Appointment::where('company_id', $companyId);
+        $salesQuery = Sale::where('company_id', $companyId)->where('status', 'closed');
         $today = Carbon::today();
         $startMonth = $today->copy()->startOfMonth();
         $start30 = $today->copy()->subDays(30);
@@ -31,10 +34,18 @@ class CompanyReportController extends Controller
             'upcoming_week' => (clone $baseQuery)
                 ->whereBetween('data', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()])
                 ->count(),
-            'revenue_month' => (float) (clone $baseQuery)
-                ->where('status', 'concluido')
-                ->whereBetween('data', [$startMonth->toDateString(), $today->toDateString()])
-                ->sum('preco'),
+            'revenue_month' => (float) (clone $salesQuery)
+                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+                ->sum('total'),
+            'services_revenue_month' => (float) (clone $salesQuery)
+                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+                ->sum('services_total'),
+            'products_revenue_month' => (float) (clone $salesQuery)
+                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+                ->sum('products_total'),
+            'closed_sales_month' => (int) (clone $salesQuery)
+                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+                ->count(),
         ];
 
         $feedbackStats = AppointmentFeedback::selectRaw('COUNT(*) as total, AVG((service_rating + professional_rating + scheduling_rating)/3) as average')
@@ -70,16 +81,40 @@ class CompanyReportController extends Controller
             })
             ->values();
 
-        $servicePerformance = Appointment::with('service:id,nome')
-            ->selectRaw('service_id, COUNT(*) as total, SUM(preco) as revenue')
-            ->where('company_id', $companyId)
-            ->groupBy('service_id')
+        $servicePerformance = DB::table('sale_items')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.company_id', $companyId)
+            ->where('sales.status', 'closed')
+            ->where('sale_items.type', 'service')
+            ->selectRaw('sale_items.service_id, sale_items.description as servico, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
+            ->groupBy('sale_items.service_id', 'sale_items.description')
             ->orderByDesc('total')
+            ->limit(8)
             ->get()
             ->map(function ($row) {
                 return [
                     'service_id' => $row->service_id,
-                    'servico' => $row->service?->nome ?? 'Serviço',
+                    'servico' => $row->servico ?? 'Serviço',
+                    'total' => (int) $row->total,
+                    'revenue' => (float) $row->revenue,
+                ];
+            })
+            ->values();
+
+        $productPerformance = DB::table('sale_items')
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->where('sales.company_id', $companyId)
+            ->where('sales.status', 'closed')
+            ->where('sale_items.type', 'product')
+            ->selectRaw('sale_items.product_id, sale_items.description as produto, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
+            ->groupBy('sale_items.product_id', 'sale_items.description')
+            ->orderByDesc('revenue')
+            ->limit(8)
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'product_id' => $row->product_id,
+                    'produto' => $row->produto ?? 'Produto',
                     'total' => (int) $row->total,
                     'revenue' => (float) $row->revenue,
                 ];
@@ -105,6 +140,7 @@ class CompanyReportController extends Controller
             'feedback' => $feedback,
             'top_clients' => $topClients,
             'services' => $servicePerformance,
+            'products' => $productPerformance,
             'trend' => $trend,
         ]);
     }

@@ -12,7 +12,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $baseUrl = rtrim(config('app.url') ?? 'http://localhost:4001', '/');
+        $baseUrl = rtrim(config('app.frontend_url', 'http://localhost:4002'), '/');
 
         $adminEmail = env('SUPERADMIN_EMAIL', 'admin@barber.com');
         $adminPassword = env('SUPERADMIN_PASSWORD', 'admin123');

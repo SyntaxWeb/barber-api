@@ -84,6 +84,13 @@ class AppointmentResource extends JsonResource
                     'slug' => $this->company?->slug,
                 ];
             }),
+            'sale' => $this->whenLoaded('sale', function () {
+                return [
+                    'id' => $this->sale?->id,
+                    'status' => $this->sale?->status,
+                    'total' => $this->sale ? (float) $this->sale->total : 0,
+                ];
+            }),
             'feedback' => $this->whenLoaded('feedback', function () {
                 return [
                     'service_rating' => $this->feedback?->service_rating,
