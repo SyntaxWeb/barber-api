@@ -126,14 +126,14 @@ class ClientController extends Controller
 
         $data = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'telefone' => ['required', 'string', 'max:40'],
             'observacoes' => ['nullable', 'string'],
         ]);
 
         $client = User::create([
             'name' => $data['nome'],
-            'email' => $data['email'],
+            'email' => $data['email'] ?? sprintf('cliente+%s@no-email.local', Str::uuid()),
             'telefone' => $data['telefone'] ?? null,
             'observacoes' => $data['observacoes'] ?? null,
             'password' => Hash::make(Str::random(16)),
