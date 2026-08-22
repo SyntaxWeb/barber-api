@@ -11,12 +11,14 @@ services:
     ports:
       - "8001:8000"
     environment:
-      APP_ENV: local
-      APP_DEBUG: "true"
+      APP_ENV: production
+      APP_DEBUG: "false"
       APP_KEY: base64:g8eODPeAoW/KauNo/Wm90XLMj8Y5o7l0DksWmRnhVsw=
-      APP_URL: http://192.168.18.97:8001
-      FRONTEND_URL: http://192.168.18.97:4002
-      CORS_ALLOWED_ORIGINS: http://localhost:4002,http://127.0.0.1:4002,http://192.168.18.59:4002,http://192.168.18.97:4002
+      APP_URL: https://api-atendimento.syntaxatendimento.com.br
+      FRONTEND_URL: https://syntaxatendimento.com.br
+      CORS_ALLOWED_ORIGINS: https://syntaxatendimento.com.br,https://www.syntaxatendimento.com.br
+      SANCTUM_STATEFUL_DOMAINS: syntaxatendimento.com.br,www.syntaxatendimento.com.br
+      SESSION_DOMAIN: .syntaxatendimento.com.br
       DB_CONNECTION: mysql
       DB_HOST: db
       DB_PORT: 3306
