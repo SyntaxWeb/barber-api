@@ -24,6 +24,10 @@ use App\Http\Controllers\Api\SuperAdmin\ActivityLogController;
 use App\Http\Controllers\Api\SuperAdmin\SystemReportController;
 use App\Http\Controllers\Api\PublicFeedbackController;
 use App\Http\Controllers\Api\CompanyReportController;
+use App\Http\Controllers\Api\Integrations\AppointmentPaymentController;
+use App\Http\Controllers\Api\Integrations\IntegrationSettingsController;
+use App\Http\Controllers\Api\Integrations\IntegrationWebhookController;
+use App\Http\Controllers\Api\Integrations\MercadoPagoOAuthCallbackController;
 use App\Http\Controllers\Api\ClientLoyaltyController;
 use App\Http\Controllers\Api\LoyaltyRewardController;
 use App\Http\Controllers\Api\LoyaltySettingsController;
@@ -38,10 +42,13 @@ Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show'])-
 Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'])->middleware('throttle:public-feedback-submit');
 
 Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class)->middleware('throttle:public-webhook');
+Route::post('/webhooks/integrations/{provider}', IntegrationWebhookController::class)->middleware('throttle:public-webhook');
 });
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/refresh', [RefreshTokenController::class, 'refresh']);
+Route::get('/integrations/mercado-pago/oauth/callback', MercadoPagoOAuthCallbackController::class)->middleware('cors');
+Route::get('/settings/integrations', [IntegrationSettingsController::class, 'index'])->middleware('cors');
 Route::middleware('cors')->post('/register', [AuthController::class, 'register']);
 
 Route::prefix('clients')->middleware('cors')->group(function () {
@@ -57,6 +64,7 @@ Route::prefix('clients')->middleware('cors')->group(function () {
         Route::get('/appointments', [ClientAppointmentController::class, 'index']);
         Route::put('/appointments/{appointment}', [ClientAppointmentController::class, 'update']);
         Route::post('/appointments/{appointment}/cancel', [ClientAppointmentController::class, 'cancel']);
+        Route::post('/appointments/{appointment}/payments', [AppointmentPaymentController::class, 'store']);
         Route::post('/appointments/{appointment}/feedback', [ClientAppointmentController::class, 'submitFeedback']);
         Route::get('/loyalty', [ClientLoyaltyController::class, 'show']);
         Route::post('/loyalty/redeem', [ClientLoyaltyController::class, 'redeem']);
@@ -89,6 +97,9 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::get('/settings', [SettingsController::class, 'show']);
     Route::put('/settings', [SettingsController::class, 'update']);
+    Route::get('/settings/integrations/{provider}', [IntegrationSettingsController::class, 'show']);
+    Route::post('/settings/integrations/{provider}/connect', [IntegrationSettingsController::class, 'connect']);
+    Route::delete('/settings/integrations/{provider}', [IntegrationSettingsController::class, 'destroy']);
     Route::get('/loyalty/settings', [LoyaltySettingsController::class, 'show']);
     Route::put('/loyalty/settings', [LoyaltySettingsController::class, 'update']);
     Route::get('/loyalty/rewards', [LoyaltyRewardController::class, 'index']);
@@ -101,6 +112,7 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
     Route::put('/appointments/{appointment}', [AppointmentController::class, 'update']);
     Route::post('/appointments/{appointment}/status', [AppointmentController::class, 'status']);
     Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy']);
+    Route::post('/appointments/{appointment}/payments', [AppointmentPaymentController::class, 'store']);
 
     Route::get('/clients', [ClientController::class, 'index']);
     Route::get('/clients/{client}/history', [ClientController::class, 'history']);

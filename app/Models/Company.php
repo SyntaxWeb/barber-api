@@ -139,6 +139,11 @@ class Company extends Model
         return $this->hasMany(SubscriptionOrder::class);
     }
 
+    public function integrations()
+    {
+        return $this->hasMany(Integration::class);
+    }
+
     public function feedbacks()
     {
         return $this->hasMany(Feedback::class);

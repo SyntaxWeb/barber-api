@@ -38,6 +38,7 @@ class AppointmentResource extends JsonResource
             'services' => $services,
             'preco' => (float) $this->preco,
             'status' => $this->status,
+            'payment_status' => $this->payment_status,
             'observacoes' => $this->observacoes,
             'loyalty_redemption' => $this->whenLoaded('loyaltyRedemption', function () {
                 return [

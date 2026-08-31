@@ -17,6 +17,7 @@ class Appointment extends Model
         'service_id',
         'preco',
         'status',
+        'payment_status',
         'observacoes',
         'reminded_at',
         'user_id',
@@ -66,5 +67,10 @@ class Appointment extends Model
     public function sale()
     {
         return $this->hasOne(Sale::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
     }
 }
