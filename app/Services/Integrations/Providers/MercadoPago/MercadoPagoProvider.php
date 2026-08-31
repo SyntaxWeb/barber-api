@@ -37,6 +37,12 @@ class MercadoPagoProvider implements PaymentProviderInterface
         return $this->payments->createPixPayment($integration, $appointment, $options);
     }
 
+    public function createStandalonePixPayment(Integration $integration, int $companyId, array $options = []): Payment
+    {
+        $integration = $this->refreshCredentialsIfNeeded($integration);
+        return $this->payments->createStandalonePixPayment($integration, $companyId, $options);
+    }
+
     public function getPayment(Integration $integration, string $providerPaymentId): array
     {
         $integration = $this->refreshCredentialsIfNeeded($integration);

@@ -10,6 +10,8 @@ interface PaymentProviderInterface extends IntegrationProviderInterface
 {
     public function createPixPayment(Integration $integration, Appointment $appointment, array $options = []): Payment;
 
+    public function createStandalonePixPayment(Integration $integration, int $companyId, array $options = []): Payment;
+
     public function getPayment(Integration $integration, string $providerPaymentId): array;
 
     public function cancelPayment(Integration $integration, Payment $payment): Payment;
