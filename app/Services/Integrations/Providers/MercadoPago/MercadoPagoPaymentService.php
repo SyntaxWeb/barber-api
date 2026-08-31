@@ -46,8 +46,11 @@ class MercadoPagoPaymentService
     {
         $amount = (float) ($options['amount'] ?? 0);
         $externalReference = ($options['reference_prefix'] ?? 'payment') . ':' . Str::uuid();
+        $idempotencyKey = (string) Str::uuid();
 
-        $response = $this->http($integration)->post("{$this->baseUri}/v1/payments", [
+        $response = $this->http($integration)
+            ->withHeaders(['X-Idempotency-Key' => $idempotencyKey])
+            ->post("{$this->baseUri}/v1/payments", [
             'transaction_amount' => $amount,
             'description' => $options['description'] ?? 'Pagamento Pix',
             'payment_method_id' => 'pix',
