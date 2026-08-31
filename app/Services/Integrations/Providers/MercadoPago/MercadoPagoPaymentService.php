@@ -20,7 +20,7 @@ class MercadoPagoPaymentService
     public function createPixPayment(Integration $integration, Appointment $appointment, array $options = []): Payment
     {
         $externalReference = 'appointment:' . $appointment->id . ':' . Str::uuid();
-        $amount = (float) $appointment->preco;
+        $amount = (float) ($options['amount'] ?? $appointment->preco);
 
         $response = $this->http($integration)->post("{$this->baseUri}/v1/payments", [
             'transaction_amount' => $amount,

@@ -22,7 +22,15 @@ class AppointmentPaymentController extends Controller
             abort(403, 'Agendamento nao pertence a sua empresa.');
         }
 
-        if ($appointment->preco <= 0) {
+        $validated = $request->validate([
+            'amount' => ['nullable', 'numeric', 'min:0.01'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'payer_email' => ['nullable', 'email', 'max:255'],
+        ]);
+
+        $amount = (float) ($validated['amount'] ?? $appointment->preco);
+
+        if ($amount <= 0) {
             return response()->json(['message' => 'Agendamento sem valor para pagamento.'], 422);
         }
 
@@ -36,7 +44,9 @@ class AppointmentPaymentController extends Controller
         }
 
         $payment = $manager->paymentProvider($integration->provider)->createPixPayment($integration, $appointment, [
-            'payer_email' => $user?->email,
+            'amount' => $amount,
+            'description' => $validated['description'] ?? null,
+            'payer_email' => $validated['payer_email'] ?? $user?->email,
         ]);
 
         return response()->json([
