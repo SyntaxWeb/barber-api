@@ -83,13 +83,17 @@ class CashRegisterPaymentController extends Controller
             return $sale->refresh();
         });
 
-        $payment = $manager->paymentProvider($integration->provider)->createStandalonePixPayment($integration, (int) $companyId, [
+        try {
+            $payment = $manager->paymentProvider($integration->provider)->createStandalonePixPayment($integration, (int) $companyId, [
             'sale_id' => $sale->id,
             'amount' => (float) $validated['amount'],
             'description' => $validated['description'] ?? "Venda livre #{$sale->id}",
-            'payer_email' => $validated['payer_email'] ?? $user?->email,
+            'payer_email' => $validated['payer_email'] ?? null,
             'payer_name' => $validated['payer_name'] ?? $validated['customer_name'] ?? null,
-        ]);
+            ]);
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
             'id' => $payment->id, 'provider' => $payment->provider, 'status' => $payment->status, 'amount' => (float) $payment->amount,

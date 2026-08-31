@@ -89,12 +89,16 @@ class AppointmentPaymentController extends Controller
             return response()->json(['message' => 'Este prestador ainda nao disponibilizou pagamento online.'], 422);
         }
 
-        $payment = $manager->paymentProvider($integration->provider)->createPixPayment($integration, $appointment, [
+        try {
+            $payment = $manager->paymentProvider($integration->provider)->createPixPayment($integration, $appointment, [
             'sale_id' => $sale->id,
             'amount' => $amount,
             'description' => $validated['description'] ?? null,
-            'payer_email' => $validated['payer_email'] ?? $user?->email,
-        ]);
+            'payer_email' => $validated['payer_email'] ?? ($user?->role === 'client' ? $user?->email : null),
+            ]);
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
             'id' => $payment->id,

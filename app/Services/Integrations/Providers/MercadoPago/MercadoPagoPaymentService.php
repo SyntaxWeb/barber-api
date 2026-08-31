@@ -54,13 +54,18 @@ class MercadoPagoPaymentService
             'external_reference' => $externalReference,
             'notification_url' => rtrim(config('app.url'), '/') . '/api/webhooks/integrations/mercado-pago',
             'payer' => [
-                'email' => $options['payer_email'] ?? 'cliente+' . Str::uuid() . '@example.com',
+                'email' => $options['payer_email'] ?? 'cliente-' . Str::uuid() . '@syntaxatendimento.com.br',
                 'first_name' => $options['payer_name'] ?? 'Cliente',
             ],
         ]);
 
         if ($response->failed()) {
-            throw new \RuntimeException('Falha ao criar pagamento Pix.');
+            $message = $response->json('message')
+                ?? $response->json('error')
+                ?? $response->body()
+                ?: 'Falha ao criar pagamento Pix.';
+
+            throw new \RuntimeException('Mercado Pago: ' . $message);
         }
 
         $payload = $response->json();
