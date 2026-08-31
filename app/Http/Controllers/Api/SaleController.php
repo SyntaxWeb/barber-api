@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Models\Product;
+use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Services\ActivityLogger;
@@ -17,7 +18,7 @@ class SaleController extends Controller
     public function index(Request $request)
     {
         $companyId = $this->companyId($request);
-        $query = Sale::with('items')->where('company_id', $companyId)->latest();
+        $query = Sale::with(['items', 'payments'])->where('company_id', $companyId)->latest();
 
         if ($request->filled('status')) {
             $query->where('status', $request->query('status'));
@@ -37,7 +38,7 @@ class SaleController extends Controller
     public function show(Request $request, Sale $sale)
     {
         $this->authorizeSale($sale, $this->companyId($request));
-        return response()->json($this->serialize($sale->load('items')));
+        return response()->json($this->serialize($sale->load('items', 'payments')));
     }
 
     public function appointmentSale(Request $request, Appointment $appointment)
@@ -52,7 +53,7 @@ class SaleController extends Controller
             $sale = DB::transaction(fn () => $this->createOpenSaleFromAppointment($request, $appointment));
         }
 
-        return response()->json($this->serialize($sale->load('items')));
+        return response()->json($this->serialize($sale->load('items', 'payments')));
     }
 
 
@@ -167,7 +168,7 @@ class SaleController extends Controller
                 'total' => $total,
             ], $request);
 
-            return $sale->load('items');
+            return $sale->load('items', 'payments');
         });
 
         return response()->json($this->serialize($sale), 201);
@@ -265,7 +266,7 @@ class SaleController extends Controller
                 'total' => $total,
             ], $request);
 
-            return $sale->load('items');
+            return $sale->load('items', 'payments');
         });
 
         return response()->json($this->serialize($sale));
@@ -299,11 +300,14 @@ class SaleController extends Controller
         }
 
         $sale->update(['services_total' => $servicesTotal, 'total' => $servicesTotal]);
-        return $sale->load('items');
+        return $sale->load('items', 'payments');
     }
 
     private function serialize(Sale $sale): array
     {
+        $sale->loadMissing('items', 'payments');
+        $latestPayment = $sale->payments->sortByDesc('id')->first();
+
         return [
             'id' => $sale->id,
             'appointment_id' => $sale->appointment_id,
@@ -318,6 +322,22 @@ class SaleController extends Controller
             'payment_method' => $sale->payment_method,
             'notes' => $sale->notes,
             'closed_at' => $sale->closed_at?->toIso8601String(),
+            'latest_payment' => $latestPayment instanceof Payment ? [
+                'id' => $latestPayment->id,
+                'provider' => $latestPayment->provider,
+                'sale_id' => $latestPayment->sale_id,
+                'status' => $latestPayment->status,
+                'amount' => (float) $latestPayment->amount,
+                'payment_method' => $latestPayment->payment_method,
+                'external_reference' => $latestPayment->external_reference,
+                'provider_status' => $latestPayment->provider_status,
+                'paid_at' => $latestPayment->paid_at?->toIso8601String(),
+                'pix' => [
+                    'qr_code' => $latestPayment->payment_data['qr_code'] ?? null,
+                    'qr_code_base64' => $latestPayment->payment_data['qr_code_base64'] ?? null,
+                    'ticket_url' => $latestPayment->payment_data['ticket_url'] ?? null,
+                ],
+            ] : null,
             'items' => $sale->items->map(fn ($item) => [
                 'id' => $item->id,
                 'type' => $item->type,

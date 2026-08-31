@@ -44,6 +44,7 @@ Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'
 
 Route::post('/mercadopago/webhook', MercadoPagoWebhookController::class)->middleware('throttle:public-webhook');
 Route::post('/webhooks/integrations/{provider}', IntegrationWebhookController::class)->middleware('throttle:public-webhook');
+Route::get('/products/images/{path}', [ProductController::class, 'image'])->where('path', '.*')->middleware('throttle:public-client-read');
 });
 
 Route::post('/login', [AuthController::class, 'login']);

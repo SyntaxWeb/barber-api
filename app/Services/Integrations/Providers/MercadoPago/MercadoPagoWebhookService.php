@@ -6,6 +6,7 @@ use App\Models\Payment;
 use App\Models\StockMovement;
 use App\Services\LoyaltyService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -14,6 +15,13 @@ class MercadoPagoWebhookService
     public function handle(Request $request, MercadoPagoProvider $provider): array
     {
         $providerPaymentId = $request->input('data.id') ?? $request->input('id');
+        Log::info('Mercado Pago integration webhook received.', [
+            'provider_payment_id' => $providerPaymentId,
+            'type' => $request->input('type'),
+            'action' => $request->input('action'),
+            'topic' => $request->input('topic'),
+        ]);
+
         if (!$providerPaymentId) {
             return ['status' => 'ignored'];
         }
@@ -25,11 +33,22 @@ class MercadoPagoWebhookService
             ->first();
 
         if (!$payment || !$payment->integration) {
+            Log::warning('Mercado Pago integration webhook payment not found.', [
+                'provider_payment_id' => $providerPaymentId,
+            ]);
+
             return ['status' => 'payment_not_found'];
         }
 
         $payload = $provider->getPayment($payment->integration, (string) $providerPaymentId);
         if (($payload['external_reference'] ?? null) !== $payment->external_reference) {
+            Log::warning('Mercado Pago integration webhook reference mismatch.', [
+                'payment_id' => $payment->id,
+                'provider_payment_id' => $providerPaymentId,
+                'expected_reference' => $payment->external_reference,
+                'received_reference' => $payload['external_reference'] ?? null,
+            ]);
+
             return ['status' => 'reference_mismatch'];
         }
 
@@ -46,6 +65,14 @@ class MercadoPagoWebhookService
         if ($payment->appointment) {
             $payment->appointment->update(['payment_status' => $status]);
         }
+
+        Log::info('Mercado Pago integration webhook payment synchronized.', [
+            'payment_id' => $payment->id,
+            'sale_id' => $payment->sale_id,
+            'appointment_id' => $payment->appointment_id,
+            'status' => $status,
+            'provider_status' => $payload['status'] ?? null,
+        ]);
 
         if ($status === Payment::STATUS_APPROVED && $payment->sale && $payment->sale->status !== 'closed') {
             DB::transaction(function () use ($payment) {
@@ -76,6 +103,11 @@ class MercadoPagoWebhookService
                     'status' => 'closed',
                     'payment_method' => 'pix',
                     'closed_at' => now(),
+                ]);
+
+                Log::info('Mercado Pago integration webhook sale closed.', [
+                    'payment_id' => $payment->id,
+                    'sale_id' => $sale->id,
                 ]);
 
                 if ($sale->appointment) {

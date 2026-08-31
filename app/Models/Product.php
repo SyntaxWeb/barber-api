@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
@@ -41,7 +40,7 @@ class Product extends Model
             return null;
         }
 
-        return Storage::disk('public')->url($this->image_path);
+        return url('/api/products/images/' . ltrim($this->image_path, '/'));
     }
 
     public function company()
