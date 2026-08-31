@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\SuperAdmin\SystemReportController;
 use App\Http\Controllers\Api\PublicFeedbackController;
 use App\Http\Controllers\Api\CompanyReportController;
 use App\Http\Controllers\Api\Integrations\AppointmentPaymentController;
+use App\Http\Controllers\Api\Integrations\CashRegisterPaymentController;
 use App\Http\Controllers\Api\Integrations\IntegrationSettingsController;
 use App\Http\Controllers\Api\Integrations\IntegrationWebhookController;
 use App\Http\Controllers\Api\Integrations\MercadoPagoOAuthCallbackController;
@@ -88,6 +89,7 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::get('/sales', [SaleController::class, 'index']);
     Route::post('/sales/direct/close', [SaleController::class, 'closeDirectSale']);
+    Route::post('/sales/direct/payments', [CashRegisterPaymentController::class, 'store']);
     Route::get('/sales/{sale}', [SaleController::class, 'show']);
     Route::get('/appointments/{appointment}/sale', [SaleController::class, 'appointmentSale']);
     Route::post('/appointments/{appointment}/sale/close', [SaleController::class, 'closeAppointmentSale']);

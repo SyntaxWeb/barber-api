@@ -19,18 +19,43 @@ class MercadoPagoPaymentService
 
     public function createPixPayment(Integration $integration, Appointment $appointment, array $options = []): Payment
     {
-        $externalReference = 'appointment:' . $appointment->id . ':' . Str::uuid();
-        $amount = (float) ($options['amount'] ?? $appointment->preco);
+        $payment = $this->createPixPaymentRecord($integration, (int) $appointment->company_id, [
+            ...$options,
+            'appointment_id' => $appointment->id,
+            'amount' => (float) ($options['amount'] ?? $appointment->preco),
+            'description' => $options['description'] ?? "Agendamento #{$appointment->id}",
+            'payer_email' => $options['payer_email'] ?? 'cliente+' . $appointment->id . '@example.com',
+            'payer_name' => $appointment->cliente,
+            'reference_prefix' => 'appointment:' . $appointment->id,
+        ]);
+
+        $appointment->update(['payment_status' => $payment->status]);
+
+        return $payment;
+    }
+
+    public function createStandalonePixPayment(Integration $integration, int $companyId, array $options = []): Payment
+    {
+        return $this->createPixPaymentRecord($integration, $companyId, [
+            ...$options,
+            'reference_prefix' => $options['reference_prefix'] ?? 'cash-register',
+        ]);
+    }
+
+    protected function createPixPaymentRecord(Integration $integration, int $companyId, array $options): Payment
+    {
+        $amount = (float) ($options['amount'] ?? 0);
+        $externalReference = ($options['reference_prefix'] ?? 'payment') . ':' . Str::uuid();
 
         $response = $this->http($integration)->post("{$this->baseUri}/v1/payments", [
             'transaction_amount' => $amount,
-            'description' => $options['description'] ?? "Agendamento #{$appointment->id}",
+            'description' => $options['description'] ?? 'Pagamento Pix',
             'payment_method_id' => 'pix',
             'external_reference' => $externalReference,
             'notification_url' => rtrim(config('app.url'), '/') . '/api/webhooks/integrations/mercado-pago',
             'payer' => [
-                'email' => $options['payer_email'] ?? 'cliente+' . $appointment->id . '@example.com',
-                'first_name' => $appointment->cliente,
+                'email' => $options['payer_email'] ?? 'cliente+' . Str::uuid() . '@example.com',
+                'first_name' => $options['payer_name'] ?? 'Cliente',
             ],
         ]);
 
@@ -42,9 +67,10 @@ class MercadoPagoPaymentService
         $status = MercadoPagoProvider::mapPaymentStatus($payload['status'] ?? null);
         $point = $payload['point_of_interaction']['transaction_data'] ?? [];
 
-        $payment = Payment::create([
-            'company_id' => $appointment->company_id,
-            'appointment_id' => $appointment->id,
+        return Payment::create([
+            'company_id' => $companyId,
+            'appointment_id' => $options['appointment_id'] ?? null,
+            'sale_id' => $options['sale_id'] ?? null,
             'integration_id' => $integration->id,
             'provider' => 'mercado_pago',
             'provider_payment_id' => isset($payload['id']) ? (string) $payload['id'] : null,
@@ -61,10 +87,6 @@ class MercadoPagoPaymentService
             ],
             'expired_at' => isset($payload['date_of_expiration']) ? $payload['date_of_expiration'] : null,
         ]);
-
-        $appointment->update(['payment_status' => $status]);
-
-        return $payment;
     }
 
     public function getPayment(Integration $integration, string $providerPaymentId): array

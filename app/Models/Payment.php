@@ -16,6 +16,7 @@ class Payment extends Model
     protected $fillable = [
         'company_id',
         'appointment_id',
+        'sale_id',
         'integration_id',
         'provider',
         'provider_payment_id',
@@ -44,6 +45,11 @@ class Payment extends Model
     public function appointment()
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function sale()
+    {
+        return $this->belongsTo(Sale::class);
     }
 
     public function integration()
