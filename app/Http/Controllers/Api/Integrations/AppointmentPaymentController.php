@@ -26,7 +26,6 @@ class AppointmentPaymentController extends Controller
         }
 
         $validated = $request->validate([
-            'amount' => ['nullable', 'numeric', 'min:0.01'],
             'description' => ['nullable', 'string', 'max:255'],
             'payer_email' => ['nullable', 'email', 'max:255'],
             'products' => ['array'],
@@ -74,7 +73,7 @@ class AppointmentPaymentController extends Controller
             return $sale->refresh();
         });
 
-        $amount = (float) ($validated['amount'] ?? $sale->total);
+        $amount = (float) $sale->total;
 
         if ($amount <= 0) {
             return response()->json(['message' => 'Agendamento sem valor para pagamento.'], 422);

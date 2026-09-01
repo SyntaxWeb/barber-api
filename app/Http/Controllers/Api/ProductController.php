@@ -93,6 +93,8 @@ class ProductController extends Controller
 
     public function image(string $path)
     {
+        $path = ltrim($path, '/');
+        abort_if(str_contains($path, '..') || !str_starts_with($path, 'products/'), 404);
         abort_unless(Storage::disk('public')->exists($path), 404);
 
         return Storage::disk('public')->response($path);

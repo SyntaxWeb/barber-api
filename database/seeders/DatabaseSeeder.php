@@ -14,8 +14,9 @@ class DatabaseSeeder extends Seeder
     {
         $baseUrl = rtrim(config('app.frontend_url', 'http://localhost:4002'), '/');
 
-        $adminEmail = env('SUPERADMIN_EMAIL', 'admin@barber.com');
-        $adminPassword = env('SUPERADMIN_PASSWORD', 'admin123');
+        $adminEmail = env('SUPERADMIN_EMAIL');
+        $adminPassword = env('SUPERADMIN_PASSWORD');
+        $demoProviderPassword = env('DEMO_PROVIDER_PASSWORD');
 
         $company = \App\Models\Company::firstOrCreate(
             ['slug' => 'syntaxatendimento'],
@@ -30,7 +31,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'carlos@barbeariavintage.com'],
             [
                 'name' => 'Carlos Vintage',
-                'password' => bcrypt('password'),
+                'password' => bcrypt($demoProviderPassword ?: str()->random(32)),
                 'telefone' => '(11) 99999-9999',
                 'objetivo' => 'Conta demonstrativa',
                 'role' => 'provider',

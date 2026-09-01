@@ -15,6 +15,16 @@ class MercadoPagoWebhookService
     public function handle(Request $request, MercadoPagoProvider $provider): array
     {
         $providerPaymentId = $request->input('data.id') ?? $request->input('id');
+        if (!$this->signatureIsValid($request, $providerPaymentId)) {
+            Log::warning('Mercado Pago integration webhook rejected by signature validation.', [
+                'provider_payment_id' => $providerPaymentId,
+                'has_signature' => $request->headers->has('x-signature'),
+                'has_request_id' => $request->headers->has('x-request-id'),
+            ]);
+
+            abort(401, 'Webhook signature invalid.');
+        }
+
         Log::info('Mercado Pago integration webhook received.', [
             'provider_payment_id' => $providerPaymentId,
             'type' => $request->input('type'),
@@ -121,5 +131,42 @@ class MercadoPagoWebhookService
         }
 
         return ['status' => 'processed'];
+    }
+
+    private function signatureIsValid(Request $request, ?string $providerPaymentId): bool
+    {
+        $secret = config('integrations.providers.mercado_pago.webhook_secret');
+        if (!$secret) {
+            return true;
+        }
+
+        $signature = (string) $request->header('x-signature', '');
+        $requestId = (string) $request->header('x-request-id', '');
+        $dataId = (string) ($request->query('data.id') ?? $request->query('data_id') ?? $providerPaymentId ?? '');
+
+        if (!$signature || !$requestId || !$dataId) {
+            return false;
+        }
+
+        $parts = collect(explode(',', $signature))
+            ->mapWithKeys(function (string $part) {
+                [$key, $value] = array_pad(explode('=', trim($part), 2), 2, null);
+                return $key && $value ? [trim($key) => trim($value)] : [];
+            });
+
+        $ts = $parts->get('ts');
+        $v1 = $parts->get('v1');
+        if (!$ts || !$v1) {
+            return false;
+        }
+
+        if (ctype_alnum($dataId)) {
+            $dataId = strtolower($dataId);
+        }
+
+        $manifest = "id:{$dataId};request-id:{$requestId};ts:{$ts};";
+        $expected = hash_hmac('sha256', $manifest, $secret);
+
+        return hash_equals($expected, $v1);
     }
 }

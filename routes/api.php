@@ -47,17 +47,17 @@ Route::post('/webhooks/integrations/{provider}', IntegrationWebhookController::c
 Route::get('/products/images/{path}', [ProductController::class, 'image'])->where('path', '.*')->middleware('throttle:public-client-read');
 });
 
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/refresh', [RefreshTokenController::class, 'refresh']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/refresh', [RefreshTokenController::class, 'refresh'])->middleware('throttle:auth-refresh');
 Route::get('/integrations/mercado-pago/oauth/callback', MercadoPagoOAuthCallbackController::class)->middleware('cors');
 Route::get('/settings/integrations', [IntegrationSettingsController::class, 'index'])->middleware('cors');
-Route::middleware('cors')->post('/register', [AuthController::class, 'register']);
+Route::middleware(['cors', 'throttle:auth-register'])->post('/register', [AuthController::class, 'register']);
 
 Route::prefix('clients')->middleware('cors')->group(function () {
-    Route::post('/register', [ClientAuthController::class, 'register']);
-    Route::post('/login', [ClientAuthController::class, 'login']);
-    Route::post('/login/google', [ClientAuthController::class, 'loginWithGoogle']);
-    Route::post('/refresh', [RefreshTokenController::class, 'refresh']);
+    Route::post('/register', [ClientAuthController::class, 'register'])->middleware('throttle:auth-register');
+    Route::post('/login', [ClientAuthController::class, 'login'])->middleware('throttle:auth-login');
+    Route::post('/login/google', [ClientAuthController::class, 'loginWithGoogle'])->middleware('throttle:auth-login');
+    Route::post('/refresh', [RefreshTokenController::class, 'refresh'])->middleware('throttle:auth-refresh');
 
     Route::middleware(['auth:sanctum', 'abilities:client'])->group(function () {
         Route::post('/logout', [ClientAuthController::class, 'logout']);

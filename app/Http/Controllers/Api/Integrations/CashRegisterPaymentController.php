@@ -33,7 +33,7 @@ class CashRegisterPaymentController extends Controller
         }
 
         $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['nullable', 'numeric', 'min:0.01'],
             'description' => ['nullable', 'string', 'max:255'],
             'payer_email' => ['nullable', 'email', 'max:255'],
             'payer_name' => ['nullable', 'string', 'max:120'],
@@ -95,10 +95,14 @@ class CashRegisterPaymentController extends Controller
             return $sale->refresh();
         });
 
+        if ((float) $sale->total <= 0) {
+            return response()->json(['message' => 'Venda sem valor para pagamento.'], 422);
+        }
+
         try {
             $payment = $manager->paymentProvider($integration->provider)->createStandalonePixPayment($integration, (int) $companyId, [
             'sale_id' => $sale->id,
-            'amount' => (float) $validated['amount'],
+            'amount' => (float) $sale->total,
             'description' => $validated['description'] ?? "Venda livre #{$sale->id}",
             'payer_email' => $validated['payer_email'] ?? null,
             'payer_name' => $validated['payer_name'] ?? $validated['customer_name'] ?? null,
