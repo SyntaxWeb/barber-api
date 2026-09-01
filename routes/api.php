@@ -91,6 +91,7 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
     Route::get('/sales', [SaleController::class, 'index']);
     Route::post('/sales/direct/close', [SaleController::class, 'closeDirectSale']);
     Route::post('/sales/direct/payments', [CashRegisterPaymentController::class, 'store']);
+    Route::get('/payments/{payment}', [CashRegisterPaymentController::class, 'show']);
     Route::get('/sales/{sale}', [SaleController::class, 'show']);
     Route::get('/appointments/{appointment}/sale', [SaleController::class, 'appointmentSale']);
     Route::post('/appointments/{appointment}/sale/close', [SaleController::class, 'closeAppointmentSale']);
