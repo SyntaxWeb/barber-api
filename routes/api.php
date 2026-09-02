@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\WhatsappSetupController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\MercadoPagoWebhookController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SuperAdmin\UserManagementController;
 use App\Http\Controllers\Api\SuperAdmin\MercadoPagoController;
@@ -48,6 +49,8 @@ Route::get('/products/images/{path}', [ProductController::class, 'image'])->wher
 });
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
+Route::post('/password/forgot', [PasswordResetController::class, 'forgot'])->middleware(['cors', 'throttle:auth-login']);
+Route::post('/password/reset', [PasswordResetController::class, 'reset'])->middleware(['cors', 'throttle:auth-login']);
 Route::post('/refresh', [RefreshTokenController::class, 'refresh'])->middleware('throttle:auth-refresh');
 Route::get('/integrations/mercado-pago/oauth/callback', MercadoPagoOAuthCallbackController::class)->middleware('cors');
 Route::get('/settings/integrations', [IntegrationSettingsController::class, 'index'])->middleware('cors');
