@@ -10,41 +10,41 @@ use App\Models\Sale;
 use App\Models\SubscriptionOrder;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SystemReportController extends Controller
 {
-    public function show()
+    public function show(Request $request)
     {
         $today = Carbon::today();
-        $startMonth = $today->copy()->startOfMonth();
-        $start30 = $today->copy()->subDays(30);
+        $period = $request->validate([
+            'period' => ['nullable', 'in:day,week,month'],
+        ])['period'] ?? 'month';
+        [$periodStart, $periodEnd] = match ($period) {
+            'day' => [$today->copy()->startOfDay(), $today->copy()->endOfDay()],
+            'week' => [$today->copy()->startOfWeek()->startOfDay(), $today->copy()->endOfWeek()->endOfDay()],
+            default => [$today->copy()->startOfMonth()->startOfDay(), $today->copy()->endOfMonth()->endOfDay()],
+        };
 
-        $baseQuery = Appointment::query();
-        $salesQuery = Sale::where('status', 'closed');
+        $baseQuery = Appointment::whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()]);
+        $salesQuery = Sale::where('status', 'closed')->whereBetween('closed_at', [$periodStart, $periodEnd]);
 
         $summary = [
             'total_appointments' => (clone $baseQuery)->count(),
             'confirmed' => (clone $baseQuery)->where('status', 'confirmado')->count(),
             'completed' => (clone $baseQuery)->where('status', 'concluido')->count(),
-            'upcoming_week' => (clone $baseQuery)
-                ->whereBetween('data', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()])
-                ->count(),
-            'revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('total'),
-            'services_revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('services_total'),
-            'products_revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('products_total'),
-            'closed_sales_month' => (int) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->count(),
+            'upcoming_week' => (clone $baseQuery)->where('status', '!=', 'cancelado')->count(),
+            'revenue_month' => (float) (clone $salesQuery)->sum('total'),
+            'services_revenue_month' => (float) (clone $salesQuery)->sum('services_total'),
+            'products_revenue_month' => (float) (clone $salesQuery)->sum('products_total'),
+            'closed_sales_month' => (int) (clone $salesQuery)->count(),
         ];
 
         $feedbackStats = AppointmentFeedback::selectRaw('COUNT(*) as total, AVG((service_rating + professional_rating + scheduling_rating)/3) as average')
+            ->whereHas('appointment', fn ($query) => $query
+                ->where('status', 'concluido')
+                ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()]))
             ->first();
 
         $pendingFeedback = (clone $baseQuery)
@@ -59,6 +59,8 @@ class SystemReportController extends Controller
         ];
 
         $topClients = Appointment::selectRaw('COALESCE(cliente, "Cliente") as cliente, telefone, COUNT(*) as total, MAX(data) as last_visit')
+            ->where('status', 'concluido')
+            ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()])
             ->groupBy('cliente', 'telefone')
             ->orderByDesc('total')
             ->limit(8)
@@ -76,6 +78,7 @@ class SystemReportController extends Controller
         $servicePerformance = DB::table('sale_items')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.status', 'closed')
+            ->whereBetween('sales.closed_at', [$periodStart, $periodEnd])
             ->where('sale_items.type', 'service')
             ->selectRaw('sale_items.service_id, sale_items.description as servico, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.service_id', 'sale_items.description')
@@ -95,6 +98,7 @@ class SystemReportController extends Controller
         $productPerformance = DB::table('sale_items')
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.status', 'closed')
+            ->whereBetween('sales.closed_at', [$periodStart, $periodEnd])
             ->where('sale_items.type', 'product')
             ->selectRaw('sale_items.product_id, sale_items.description as produto, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.product_id', 'sale_items.description')
@@ -112,7 +116,7 @@ class SystemReportController extends Controller
             ->values();
 
         $trend = Appointment::selectRaw('DATE(data) as date, COUNT(*) as total')
-            ->whereBetween('data', [$start30->toDateString(), $today->toDateString()])
+            ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()])
             ->groupByRaw('DATE(data)')
             ->orderBy('date')
             ->get()
@@ -127,16 +131,16 @@ class SystemReportController extends Controller
         $subscriptionRevenue = SubscriptionOrder::query()
             ->where('status', 'pago')
             ->whereNotNull('paid_at')
-            ->whereBetween('paid_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+            ->whereBetween('paid_at', [$periodStart, $periodEnd])
             ->sum('price');
 
         $systemOverview = [
             'total_companies' => Company::count(),
             'active_companies' => Company::where('subscription_status', 'ativo')->count(),
-            'new_companies_30d' => Company::where('created_at', '>=', $start30)->count(),
+            'new_companies_30d' => Company::whereBetween('created_at', [$periodStart, $periodEnd])->count(),
             'active_providers' => User::where('role', 'provider')->count(),
             'total_clients' => User::where('role', 'client')->count(),
-            'new_clients_30d' => User::where('role', 'client')->where('created_at', '>=', $start30)->count(),
+            'new_clients_30d' => User::where('role', 'client')->whereBetween('created_at', [$periodStart, $periodEnd])->count(),
             'revenue_month' => (float) $subscriptionRevenue,
         ];
 
@@ -165,6 +169,7 @@ class SystemReportController extends Controller
             ->values();
 
         $recentCompanies = Company::select('id', 'nome', 'subscription_plan', 'subscription_status', 'created_at')
+            ->whereBetween('created_at', [$periodStart, $periodEnd])
             ->latest()
             ->limit(6)
             ->get()
@@ -180,6 +185,11 @@ class SystemReportController extends Controller
             ->values();
 
         return response()->json([
+            'period' => [
+                'type' => $period,
+                'start' => $periodStart->toDateString(),
+                'end' => $periodEnd->toDateString(),
+            ],
             'summary' => $summary,
             'feedback' => $feedback,
             'top_clients' => $topClients,

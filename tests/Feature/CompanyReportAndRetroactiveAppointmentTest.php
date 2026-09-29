@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Sale;
 use App\Models\Service;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -84,6 +85,50 @@ class CompanyReportAndRetroactiveAppointmentTest extends TestCase
             ->assertJsonPath('summary.products_revenue_month', 20)
             ->assertJsonPath('summary.closed_sales_month', 1)
             ->assertJsonPath('services.0.revenue', 80);
+    }
+
+    public function test_company_report_can_be_viewed_by_day_week_and_month(): void
+    {
+        Carbon::setTestNow('2026-09-16 12:00:00');
+
+        try {
+            [$company, $provider] = $this->fixture();
+            Sanctum::actingAs($provider, ['provider']);
+
+            foreach ([
+                ['closed_at' => now(), 'total' => 90],
+                ['closed_at' => now()->startOfWeek(), 'total' => 50],
+                ['closed_at' => now()->startOfMonth(), 'total' => 30],
+            ] as $sale) {
+                Sale::create([
+                    'company_id' => $company->id,
+                    'user_id' => $provider->id,
+                    'status' => 'closed',
+                    'services_total' => $sale['total'],
+                    'products_total' => 0,
+                    'discount' => 0,
+                    'total' => $sale['total'],
+                    'closed_at' => $sale['closed_at'],
+                ]);
+            }
+
+            $this->getJson('/api/company/report?period=day')
+                ->assertOk()
+                ->assertJsonPath('period.type', 'day')
+                ->assertJsonPath('summary.revenue_month', 90);
+
+            $this->getJson('/api/company/report?period=week')
+                ->assertOk()
+                ->assertJsonPath('period.type', 'week')
+                ->assertJsonPath('summary.revenue_month', 140);
+
+            $this->getJson('/api/company/report?period=month')
+                ->assertOk()
+                ->assertJsonPath('period.type', 'month')
+                ->assertJsonPath('summary.revenue_month', 170);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     private function fixture(): array

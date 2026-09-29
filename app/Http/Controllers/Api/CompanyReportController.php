@@ -21,45 +21,38 @@ class CompanyReportController extends Controller
             return response()->json(['message' => 'Empresa não encontrada.'], 403);
         }
 
-        $baseQuery = Appointment::where('company_id', $companyId);
-        $salesQuery = Sale::where('company_id', $companyId)->where('status', 'closed');
         $today = Carbon::today();
-        $now = Carbon::now();
-        $startMonth = $today->copy()->startOfMonth();
-        $start30 = $today->copy()->subDays(29);
+        $period = $request->validate([
+            'period' => ['nullable', 'in:day,week,month'],
+        ])['period'] ?? 'month';
+        [$periodStart, $periodEnd] = match ($period) {
+            'day' => [$today->copy()->startOfDay(), $today->copy()->endOfDay()],
+            'week' => [$today->copy()->startOfWeek()->startOfDay(), $today->copy()->endOfWeek()->endOfDay()],
+            default => [$today->copy()->startOfMonth()->startOfDay(), $today->copy()->endOfMonth()->endOfDay()],
+        };
+
+        $baseQuery = Appointment::where('company_id', $companyId)
+            ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()]);
+        $salesQuery = Sale::where('company_id', $companyId)
+            ->where('status', 'closed')
+            ->whereBetween('closed_at', [$periodStart, $periodEnd]);
 
         $summary = [
             'total_appointments' => (clone $baseQuery)->count(),
             'confirmed' => (clone $baseQuery)->where('status', 'confirmado')->count(),
             'completed' => (clone $baseQuery)->where('status', 'concluido')->count(),
-            'upcoming_week' => (clone $baseQuery)
-                ->whereBetween('data', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()])
-                ->where('status', '!=', 'cancelado')
-                ->where(function ($query) use ($today, $now) {
-                    $query->whereDate('data', '>', $today->toDateString())
-                        ->orWhere(function ($todayQuery) use ($today, $now) {
-                            $todayQuery->whereDate('data', $today->toDateString())
-                                ->where('horario', '>=', $now->format('H:i'));
-                        });
-                })
-                ->count(),
-            'revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('total'),
-            'services_revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('services_total'),
-            'products_revenue_month' => (float) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->sum('products_total'),
-            'closed_sales_month' => (int) (clone $salesQuery)
-                ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
-                ->count(),
+            'upcoming_week' => (clone $baseQuery)->where('status', '!=', 'cancelado')->count(),
+            'revenue_month' => (float) (clone $salesQuery)->sum('total'),
+            'services_revenue_month' => (float) (clone $salesQuery)->sum('services_total'),
+            'products_revenue_month' => (float) (clone $salesQuery)->sum('products_total'),
+            'closed_sales_month' => (int) (clone $salesQuery)->count(),
         ];
 
         $feedbackStats = AppointmentFeedback::selectRaw('COUNT(*) as total, AVG((service_rating + professional_rating + scheduling_rating)/3) as average')
-            ->whereHas('appointment', function ($query) use ($companyId) {
-                $query->where('company_id', $companyId)->where('status', 'concluido');
+            ->whereHas('appointment', function ($query) use ($companyId, $periodStart, $periodEnd) {
+                $query->where('company_id', $companyId)
+                    ->where('status', 'concluido')
+                    ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()]);
             })
             ->whereBetween('service_rating', [1, 5])
             ->whereBetween('professional_rating', [1, 5])
@@ -80,6 +73,7 @@ class CompanyReportController extends Controller
         $topClients = Appointment::selectRaw('COALESCE(cliente, "Cliente") as cliente, telefone, COUNT(*) as total, MAX(data) as last_visit')
             ->where('company_id', $companyId)
             ->where('status', 'concluido')
+            ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()])
             ->groupBy('cliente', 'telefone')
             ->orderByDesc('total')
             ->limit(8)
@@ -98,7 +92,7 @@ class CompanyReportController extends Controller
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.company_id', $companyId)
             ->where('sales.status', 'closed')
-            ->whereBetween('sales.closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+            ->whereBetween('sales.closed_at', [$periodStart, $periodEnd])
             ->where('sale_items.type', 'service')
             ->selectRaw('sale_items.service_id, sale_items.description as servico, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.service_id', 'sale_items.description')
@@ -119,7 +113,7 @@ class CompanyReportController extends Controller
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.company_id', $companyId)
             ->where('sales.status', 'closed')
-            ->whereBetween('sales.closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
+            ->whereBetween('sales.closed_at', [$periodStart, $periodEnd])
             ->where('sale_items.type', 'product')
             ->selectRaw('sale_items.product_id, sale_items.description as produto, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.product_id', 'sale_items.description')
@@ -138,7 +132,7 @@ class CompanyReportController extends Controller
 
         $trend = Appointment::selectRaw('DATE(data) as date, COUNT(*) as total')
             ->where('company_id', $companyId)
-            ->whereBetween('data', [$start30->toDateString(), $today->toDateString()])
+            ->whereBetween('data', [$periodStart->toDateString(), $periodEnd->toDateString()])
             ->where('status', '!=', 'cancelado')
             ->groupByRaw('DATE(data)')
             ->orderBy('date')
@@ -152,6 +146,11 @@ class CompanyReportController extends Controller
             ->values();
 
         return response()->json([
+            'period' => [
+                'type' => $period,
+                'start' => $periodStart->toDateString(),
+                'end' => $periodEnd->toDateString(),
+            ],
             'summary' => $summary,
             'feedback' => $feedback,
             'top_clients' => $topClients,
