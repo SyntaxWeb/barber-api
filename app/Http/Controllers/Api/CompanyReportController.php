@@ -24,8 +24,9 @@ class CompanyReportController extends Controller
         $baseQuery = Appointment::where('company_id', $companyId);
         $salesQuery = Sale::where('company_id', $companyId)->where('status', 'closed');
         $today = Carbon::today();
+        $now = Carbon::now();
         $startMonth = $today->copy()->startOfMonth();
-        $start30 = $today->copy()->subDays(30);
+        $start30 = $today->copy()->subDays(29);
 
         $summary = [
             'total_appointments' => (clone $baseQuery)->count(),
@@ -33,6 +34,14 @@ class CompanyReportController extends Controller
             'completed' => (clone $baseQuery)->where('status', 'concluido')->count(),
             'upcoming_week' => (clone $baseQuery)
                 ->whereBetween('data', [$today->toDateString(), $today->copy()->addDays(7)->toDateString()])
+                ->where('status', '!=', 'cancelado')
+                ->where(function ($query) use ($today, $now) {
+                    $query->whereDate('data', '>', $today->toDateString())
+                        ->orWhere(function ($todayQuery) use ($today, $now) {
+                            $todayQuery->whereDate('data', $today->toDateString())
+                                ->where('horario', '>=', $now->format('H:i'));
+                        });
+                })
                 ->count(),
             'revenue_month' => (float) (clone $salesQuery)
                 ->whereBetween('closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
@@ -50,8 +59,11 @@ class CompanyReportController extends Controller
 
         $feedbackStats = AppointmentFeedback::selectRaw('COUNT(*) as total, AVG((service_rating + professional_rating + scheduling_rating)/3) as average')
             ->whereHas('appointment', function ($query) use ($companyId) {
-                $query->where('company_id', $companyId);
+                $query->where('company_id', $companyId)->where('status', 'concluido');
             })
+            ->whereBetween('service_rating', [1, 5])
+            ->whereBetween('professional_rating', [1, 5])
+            ->whereBetween('scheduling_rating', [1, 5])
             ->first();
 
         $pendingFeedback = (clone $baseQuery)
@@ -67,6 +79,7 @@ class CompanyReportController extends Controller
 
         $topClients = Appointment::selectRaw('COALESCE(cliente, "Cliente") as cliente, telefone, COUNT(*) as total, MAX(data) as last_visit')
             ->where('company_id', $companyId)
+            ->where('status', 'concluido')
             ->groupBy('cliente', 'telefone')
             ->orderByDesc('total')
             ->limit(8)
@@ -85,6 +98,7 @@ class CompanyReportController extends Controller
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.company_id', $companyId)
             ->where('sales.status', 'closed')
+            ->whereBetween('sales.closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
             ->where('sale_items.type', 'service')
             ->selectRaw('sale_items.service_id, sale_items.description as servico, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.service_id', 'sale_items.description')
@@ -105,6 +119,7 @@ class CompanyReportController extends Controller
             ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
             ->where('sales.company_id', $companyId)
             ->where('sales.status', 'closed')
+            ->whereBetween('sales.closed_at', [$startMonth->copy()->startOfDay(), $today->copy()->endOfDay()])
             ->where('sale_items.type', 'product')
             ->selectRaw('sale_items.product_id, sale_items.description as produto, SUM(sale_items.quantity) as total, SUM(sale_items.total) as revenue')
             ->groupBy('sale_items.product_id', 'sale_items.description')
@@ -124,6 +139,7 @@ class CompanyReportController extends Controller
         $trend = Appointment::selectRaw('DATE(data) as date, COUNT(*) as total')
             ->where('company_id', $companyId)
             ->whereBetween('data', [$start30->toDateString(), $today->toDateString()])
+            ->where('status', '!=', 'cancelado')
             ->groupByRaw('DATE(data)')
             ->orderBy('date')
             ->get()
