@@ -286,6 +286,16 @@ class AppointmentController extends Controller
 
         $previousStatus = $appointment->status;
         $newStatus = $request->validated()['status'];
+
+        if ($newStatus === 'concluido') {
+            $appointment->loadMissing('sale');
+            if (!$appointment->sale || $appointment->sale->status !== 'closed') {
+                return response()->json([
+                    'message' => 'Feche o caixa do atendimento antes de concluir o agendamento.',
+                ], 422);
+            }
+        }
+
         $appointment->update(['status' => $newStatus]);
         ActivityLogger::record($request->user('sanctum'), 'appointment.status_updated', [
             'appointment_id' => $appointment->id,

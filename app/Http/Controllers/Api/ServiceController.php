@@ -131,7 +131,7 @@ class ServiceController extends Controller
     {
         $user = $request->user('sanctum');
 
-        if ($user?->company_id) {
+        if ($user?->company_id && in_array($user->role, ['provider', 'admin'], true)) {
             return $user->company_id;
         }
 

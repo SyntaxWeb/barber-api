@@ -34,6 +34,7 @@ class CompanyController extends Controller
             'notify_via_email'     => filter_var($request->notify_via_email, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
             'notify_via_telegram'  => filter_var($request->notify_via_telegram, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
             'notify_via_whatsapp'  => filter_var($request->notify_via_whatsapp, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
+            'discovery_enabled'    => filter_var($request->discovery_enabled, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE),
         ]);
         
         $company = $user->company;
@@ -47,6 +48,14 @@ class CompanyController extends Controller
         $validator = Validator::make($request->all(), [
             'nome'                 => 'required|string|max:255',
             'descricao'            => 'nullable|string|max:1000',
+            'address_line'         => 'nullable|string|max:255',
+            'neighborhood'         => 'nullable|string|max:120',
+            'city'                 => 'nullable|string|max:120',
+            'state'                => 'nullable|string|size:2',
+            'postal_code'          => 'nullable|string|max:12',
+            'latitude'             => 'nullable|numeric|between:-90,90',
+            'longitude'            => 'nullable|numeric|between:-180,180',
+            'discovery_enabled'    => 'nullable|boolean',
             'icone'                => 'nullable|image|max:2048',
             'notify_email'         => 'nullable|email',
             'notify_via_email'     => 'nullable|boolean',
@@ -93,6 +102,16 @@ class CompanyController extends Controller
         $updateData = [
             'nome' => $data['nome'],
             'descricao' => $data['descricao'] ?? null,
+            'address_line' => $data['address_line'] ?? null,
+            'neighborhood' => $data['neighborhood'] ?? null,
+            'city' => $data['city'] ?? null,
+            'state' => isset($data['state']) ? mb_strtoupper($data['state']) : null,
+            'postal_code' => $data['postal_code'] ?? null,
+            'latitude' => $data['latitude'] ?? null,
+            'longitude' => $data['longitude'] ?? null,
+            'discovery_enabled' => $request->has('discovery_enabled')
+                ? $request->boolean('discovery_enabled')
+                : $company->discovery_enabled,
             'icon_path' => $data['icon_path'] ?? $company->icon_path,
             'notify_email' => $data['notify_email'] ?? $company->notify_email,
             'notify_via_email' => $request->boolean('notify_via_email'),
@@ -145,6 +164,7 @@ class CompanyController extends Controller
 
     public function publicShow(Company $company)
     {
+        $company->load(['services' => fn ($query) => $query->where('ativo', true)->orderBy('nome')]);
         $this->ensureQrCode($company);
         return new CompanyPublicResource($company);
     }
@@ -152,8 +172,10 @@ class CompanyController extends Controller
     public function feedbackSummary(Company $company)
     {
         $feedbackQuery = AppointmentFeedback::whereHas('appointment', function ($query) use ($company) {
-            $query->where('company_id', $company->id);
-        });
+            $query->where('company_id', $company->id)->where('status', 'concluido');
+        })->whereBetween('service_rating', [1, 5])
+            ->whereBetween('professional_rating', [1, 5])
+            ->whereBetween('scheduling_rating', [1, 5]);
 
         $count = (clone $feedbackQuery)->count();
 
@@ -185,7 +207,7 @@ class CompanyController extends Controller
 
                 return [
                     'id' => $feedback->id,
-                    'client_name' => $appointment?->cliente ?? $appointment?->user?->name,
+                    'client_name' => $this->publicClientName($appointment?->cliente ?? $appointment?->user?->name),
                     'rating' => round($feedback->average_rating, 2),
                     'comment' => $feedback->comment,
                     'created_at' => ($feedback->submitted_at ?? $feedback->created_at)?->toIso8601String(),
@@ -199,6 +221,20 @@ class CompanyController extends Controller
             'count' => $count,
             'recent' => $recent,
         ]);
+    }
+
+    private function publicClientName(?string $name): ?string
+    {
+        if (!$name) {
+            return null;
+        }
+
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+        if (count($parts) < 2) {
+            return $parts[0] ?? null;
+        }
+
+        return $parts[0] . ' ' . mb_strtoupper(mb_substr(end($parts), 0, 1)) . '.';
     }
 
     protected function ensureQrCode(?Company $company): void

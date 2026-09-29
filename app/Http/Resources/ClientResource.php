@@ -21,6 +21,7 @@ class ClientResource extends JsonResource
             'email' => Str::endsWith((string) $this->email, '@no-email.local') ? null : $this->email,
             'telefone' => $this->telefone,
             'observacoes' => $this->observacoes,
+            'avatar_url' => $this->avatar_url,
             'created_at' => optional($this->created_at)->toIso8601String(),
             'updated_at' => optional($this->updated_at)->toIso8601String(),
         ];

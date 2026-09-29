@@ -60,6 +60,18 @@ class User extends Authenticatable
         return $this->belongsTo(Company::class);
     }
 
+    public function clientCompanies()
+    {
+        return $this->belongsToMany(Company::class, 'company_client')
+            ->withPivot('first_appointment_at')
+            ->withTimestamps();
+    }
+
+    public function appointments()
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
     public function getAvatarUrlAttribute(): ?string
     {
         if (!$this->avatar_path) {

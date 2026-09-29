@@ -73,4 +73,33 @@ class Appointment extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    protected static function booted(): void
+    {
+        static::created(function (Appointment $appointment) {
+            $appointment->ensureClientCompanyLink();
+        });
+
+        static::updated(function (Appointment $appointment) {
+            if ($appointment->wasChanged(['company_id', 'user_id'])) {
+                $appointment->ensureClientCompanyLink();
+            }
+        });
+    }
+
+    public function ensureClientCompanyLink(): void
+    {
+        if (!$this->company_id || !$this->user_id) {
+            return;
+        }
+
+        $user = $this->relationLoaded('user') ? $this->user : User::find($this->user_id);
+        if (!$user || $user->role !== 'client') {
+            return;
+        }
+
+        $user->clientCompanies()->syncWithoutDetaching([
+            $this->company_id => ['first_appointment_at' => $this->created_at ?? now()],
+        ]);
+    }
 }

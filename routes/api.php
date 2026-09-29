@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ClientAuthController;
 use App\Http\Controllers\Api\ClientAppointmentController;
 use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\CompanyDiscoveryController;
 use App\Http\Controllers\Api\RefreshTokenController;
 use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\ProductController;
@@ -40,6 +41,7 @@ Route::get('/services', [ServiceController::class, 'index'])->middleware('thrott
 Route::get('/availability', AvailabilityController::class)->middleware('throttle:public-client-read');
 Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow'])->middleware('throttle:public-company-read');
 Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary'])->middleware('throttle:public-company-read');
+Route::get('/discover/companies', [CompanyDiscoveryController::class, 'index'])->middleware('throttle:public-company-read');
 Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show'])->middleware('throttle:public-client-read');
 Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'])->middleware('throttle:public-feedback-submit');
 
@@ -67,6 +69,7 @@ Route::prefix('clients')->middleware('cors')->group(function () {
         Route::get('/me', [ClientAuthController::class, 'me']);
         Route::post('/profile', [ProfileController::class, 'updateClient']);
         Route::get('/appointments', [ClientAppointmentController::class, 'index']);
+        Route::get('/companies', [CompanyDiscoveryController::class, 'mine']);
         Route::put('/appointments/{appointment}', [ClientAppointmentController::class, 'update']);
         Route::post('/appointments/{appointment}/cancel', [ClientAppointmentController::class, 'cancel']);
         Route::post('/appointments/{appointment}/payments', [AppointmentPaymentController::class, 'store']);

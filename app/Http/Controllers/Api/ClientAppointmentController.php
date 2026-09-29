@@ -41,13 +41,8 @@ class ClientAppointmentController extends Controller
     {
         $user = $request->user('sanctum');
 
-        if (!$user->company_id) {
-            return response()->json(['message' => 'Cliente não vinculado a uma empresa.'], 422);
-        }
-
         $query = Appointment::with(['service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward'])
             ->where('user_id', $user->id)
-            ->where('company_id', $user->company_id)
             ->orderBy('data')
             ->orderBy('horario');
 
@@ -66,10 +61,6 @@ class ClientAppointmentController extends Controller
 
         if ($appointment->user_id !== $user->id) {
             abort(403, 'Agendamento não pertence ao cliente autenticado.');
-        }
-
-        if ($appointment->company_id !== $user->company_id) {
-            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
         }
 
         if ($appointment->status !== 'confirmado') {
@@ -143,10 +134,6 @@ class ClientAppointmentController extends Controller
             abort(403, 'Agendamento não pertence ao cliente autenticado.');
         }
 
-        if ($appointment->company_id !== $user->company_id) {
-            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
-        }
-
         if ($appointment->status !== 'confirmado') {
             return response()->json(['message' => 'Apenas agendamentos confirmados podem ser cancelados.'], 422);
         }
@@ -175,10 +162,6 @@ class ClientAppointmentController extends Controller
 
         if ($appointment->user_id !== $user->id) {
             abort(403, 'Agendamento não pertence ao cliente autenticado.');
-        }
-
-        if ($appointment->company_id !== $user->company_id) {
-            abort(403, 'Agendamento não pertence à empresa vinculada ao cliente.');
         }
 
         if ($appointment->status !== 'concluido') {

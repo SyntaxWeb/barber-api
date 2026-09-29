@@ -23,7 +23,7 @@ class ClientController extends Controller
 
         $clients = User::query()
             ->where('role', 'client')
-            ->where('company_id', $provider->company_id)
+            ->whereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $provider->company_id))
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery
@@ -43,7 +43,7 @@ class ClientController extends Controller
     {
         $provider = $request->user();
 
-        if ($client->role !== 'client' || $client->company_id !== $provider->company_id) {
+        if ($client->role !== 'client' || !$client->clientCompanies()->where('companies.id', $provider->company_id)->exists()) {
             abort(403, 'Cliente não pertence à sua empresa.');
         }
 
@@ -126,20 +126,32 @@ class ClientController extends Controller
 
         $data = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['nullable', 'email', 'max:255'],
             'telefone' => ['required', 'string', 'max:40'],
             'observacoes' => ['nullable', 'string'],
         ]);
 
-        $client = User::create([
-            'name' => $data['nome'],
-            'email' => $data['email'] ?? sprintf('cliente+%s@no-email.local', Str::uuid()),
-            'telefone' => $data['telefone'] ?? null,
-            'observacoes' => $data['observacoes'] ?? null,
-            'password' => Hash::make(Str::random(16)),
-            'role' => 'client',
-            'company_id' => $provider->company_id,
-        ]);
+        $client = isset($data['email'])
+            ? User::where('email', $data['email'])->first()
+            : null;
+
+        if ($client && $client->role !== 'client') {
+            return response()->json(['message' => 'Este email pertence a outro tipo de conta.'], 422);
+        }
+
+        if (!$client) {
+            $client = User::create([
+                'name' => $data['nome'],
+                'email' => $data['email'] ?? sprintf('cliente+%s@no-email.local', Str::uuid()),
+                'telefone' => $data['telefone'],
+                'observacoes' => $data['observacoes'] ?? null,
+                'password' => Hash::make(Str::random(16)),
+                'role' => 'client',
+                'company_id' => null,
+            ]);
+        }
+
+        $client->clientCompanies()->syncWithoutDetaching([$provider->company_id]);
 
         return new ClientResource($client);
     }

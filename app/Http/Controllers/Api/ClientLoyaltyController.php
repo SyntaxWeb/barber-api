@@ -7,6 +7,7 @@ use App\Models\LoyaltyAccount;
 use App\Models\LoyaltyRedemption;
 use App\Models\LoyaltyReward;
 use App\Models\LoyaltyTransaction;
+use App\Models\Company;
 use App\Notifications\LoyaltyRewardRedeemedNotification;
 use App\Services\LoyaltyService;
 use Illuminate\Http\Request;
@@ -17,23 +18,21 @@ class ClientLoyaltyController extends Controller
     public function show(Request $request, LoyaltyService $loyalty)
     {
         $user = $request->user('sanctum');
-        if (!$user?->company_id) {
-            abort(403, 'Cliente não vinculado a uma empresa.');
-        }
+        $company = $this->resolveCompany($request, $user->id);
 
         $account = LoyaltyAccount::firstOrCreate(
             [
-                'company_id' => $user->company_id,
+                'company_id' => $company->id,
                 'user_id' => $user->id,
             ],
             ['points_balance' => 0]
         );
 
-        $settings = $loyalty->settingsForCompany($user->company_id);
+        $settings = $loyalty->settingsForCompany($company->id);
         $loyalty->syncExpiredPoints($account, $settings);
         $account->refresh();
 
-        $rewards = LoyaltyReward::where('company_id', $user->company_id)
+        $rewards = LoyaltyReward::where('company_id', $company->id)
             ->where('active', true)
             ->orderBy('points_cost')
             ->get();
@@ -50,7 +49,7 @@ class ClientLoyaltyController extends Controller
             ]);
 
         $pendingRedemptions = LoyaltyRedemption::with('reward')
-            ->where('company_id', $user->company_id)
+            ->where('company_id', $company->id)
             ->where('user_id', $user->id)
             ->where('status', 'pending')
             ->orderByDesc('created_at')
@@ -81,15 +80,13 @@ class ClientLoyaltyController extends Controller
     public function redeem(Request $request, LoyaltyService $loyalty)
     {
         $user = $request->user('sanctum');
-        if (!$user?->company_id) {
-            abort(403, 'Cliente não vinculado a uma empresa.');
-        }
+        $company = $this->resolveCompany($request, $user->id);
 
         $data = $request->validate([
             'reward_id' => ['required', 'integer', 'exists:loyalty_rewards,id'],
         ]);
 
-        $reward = LoyaltyReward::where('company_id', $user->company_id)
+        $reward = LoyaltyReward::where('company_id', $company->id)
             ->where('id', $data['reward_id'])
             ->where('active', true)
             ->firstOrFail();
@@ -98,7 +95,7 @@ class ClientLoyaltyController extends Controller
         $account = $result['account'];
         $redemption = $result['redemption'];
 
-        $providers = $user->company?->users()->where('role', 'provider')->get() ?? collect();
+        $providers = $company->users()->where('role', 'provider')->get();
         if ($providers->isNotEmpty()) {
             Notification::send($providers, new LoyaltyRewardRedeemedNotification($user, $reward, $redemption?->id));
         }
@@ -115,5 +112,19 @@ class ClientLoyaltyController extends Controller
                 ],
             ] : null,
         ]);
+    }
+
+    private function resolveCompany(Request $request, int $userId): Company
+    {
+        $data = $request->validate(['company' => ['required', 'string', 'exists:companies,slug']]);
+        $company = Company::where('slug', $data['company'])
+            ->whereHas('appointments', fn ($appointments) => $appointments->where('user_id', $userId))
+            ->first();
+
+        if (!$company) {
+            abort(403, 'Programa de fidelidade disponível após o primeiro atendimento nesta empresa.');
+        }
+
+        return $company;
     }
 }

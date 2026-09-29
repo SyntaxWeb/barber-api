@@ -35,7 +35,8 @@ class AvailabilityController extends Controller
 
     private function resolveCompanyId(Request $request): int
     {
-        if ($request->user('sanctum')?->company_id) {
+        if ($request->user('sanctum')?->company_id
+            && in_array($request->user('sanctum')->role, ['provider', 'admin'], true)) {
             return $request->user('sanctum')->company_id;
         }
 

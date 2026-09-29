@@ -15,6 +15,14 @@ class Company extends Model
         'nome',
         'slug',
         'descricao',
+        'address_line',
+        'neighborhood',
+        'city',
+        'state',
+        'postal_code',
+        'latitude',
+        'longitude',
+        'discovery_enabled',
         'agendamento_url',
         'qr_code_svg',
         'icon_path',
@@ -66,6 +74,9 @@ class Company extends Model
         'whatsapp_api_token_expires_at' => 'datetime',
         'subscription_price' => 'decimal:2',
         'subscription_renews_at' => 'datetime',
+        'latitude' => 'float',
+        'longitude' => 'float',
+        'discovery_enabled' => 'boolean',
     ];
 
     protected const THEME_KEYS = ['primary', 'secondary', 'background', 'surface', 'text', 'accent'];
@@ -73,6 +84,23 @@ class Company extends Model
     public function users()
     {
         return $this->hasMany(User::class);
+    }
+
+    public function clients()
+    {
+        return $this->belongsToMany(User::class, 'company_client')
+            ->withPivot('first_appointment_at')
+            ->withTimestamps();
+    }
+
+    public function appointmentFeedbacks()
+    {
+        return $this->hasManyThrough(
+            AppointmentFeedback::class,
+            Appointment::class,
+            'company_id',
+            'appointment_id'
+        );
     }
 
     public static function defaultDashboardTheme(): array

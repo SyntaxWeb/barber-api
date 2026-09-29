@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Api\RefreshTokenController;
-use App\Models\Company;
 use App\Models\User;
 use App\Models\RefreshToken;
 use App\Services\GoogleClientVerifier;
@@ -27,7 +26,7 @@ class ClientAuthController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
             'telefone' => ['required', 'string', 'max:40'],
-            'company_slug' => ['required', 'string', 'exists:companies,slug'],
+            'company_slug' => ['nullable', 'string', 'exists:companies,slug'],
         ]);
 
         // Verifica se a validação falhou
@@ -40,15 +39,13 @@ class ClientAuthController extends Controller
 
         // Se a validação passar, prossegue com o processamento
         $data = $validator->validated();
-        $company = Company::where('slug', $data['company_slug'])->firstOrFail();
-
         $client = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'telefone' => $data['telefone'],
             'role' => 'client',
-            'company_id' => $company->id,
+            'company_id' => null,
         ]);
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;
@@ -67,10 +64,8 @@ class ClientAuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required'],
-            'company_slug' => ['required', 'string', 'exists:companies,slug'],
+            'company_slug' => ['nullable', 'string', 'exists:companies,slug'],
         ]);
-
-        $company = Company::where('slug', $credentials['company_slug'])->firstOrFail();
 
         if (!Auth::attempt($request->only('email', 'password'))) {
             return response()->json(['message' => 'Credenciais inválidas'], 401);
@@ -82,16 +77,6 @@ class ClientAuthController extends Controller
         if ($client->role !== 'client') {
             Auth::logout();
             return response()->json(['message' => 'Esta conta não é de cliente.'], 403);
-        }
-
-        if ($client->company_id && $client->company_id !== $company->id) {
-            Auth::logout();
-            return response()->json(['message' => 'Esta conta pertence a outra empresa.'], 403);
-        }
-
-        if (!$client->company_id) {
-            $client->company_id = $company->id;
-            $client->save();
         }
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;
@@ -122,7 +107,7 @@ class ClientAuthController extends Controller
     {
         $data = $request->validate([
             'credential' => ['required', 'string'],
-            'company_slug' => ['required', 'string', 'exists:companies,slug'],
+            'company_slug' => ['nullable', 'string', 'exists:companies,slug'],
         ]);
 
         try {
@@ -135,8 +120,6 @@ class ClientAuthController extends Controller
             ], 422);
         }
 
-        $company = Company::where('slug', $data['company_slug'])->firstOrFail();
-
         $client = User::firstOrCreate(
             ['email' => $payload['email']],
             [
@@ -144,21 +127,12 @@ class ClientAuthController extends Controller
                 'password' => Hash::make(Str::random(32)),
                 'telefone' => $payload['phone_number'] ?? null,
                 'role' => 'client',
-                'company_id' => $company->id,
+                'company_id' => null,
             ],
         );
 
         if ($client->role !== 'client') {
             return response()->json(['message' => 'Esta conta já está vinculada a outro perfil.'], 403);
-        }
-
-        if ($client->company_id && $client->company_id !== $company->id) {
-            return response()->json(['message' => 'Esta conta pertence a outra empresa.'], 403);
-        }
-
-        if (!$client->company_id) {
-            $client->company_id = $company->id;
-            $client->save();
         }
 
         $token = $client->createToken('client_token', ['client'])->plainTextToken;

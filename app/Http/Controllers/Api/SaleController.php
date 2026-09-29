@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\StockMovement;
+use App\Jobs\SendFeedbackInvitationJob;
 use App\Services\ActivityLogger;
 use App\Services\LoyaltyService;
 use Illuminate\Http\Request;
@@ -258,6 +259,7 @@ class SaleController extends Controller
             $appointment->update(['status' => 'concluido', 'preco' => $servicesTotal]);
             if ($previousStatus !== 'concluido') {
                 $loyalty->awardForAppointment($appointment);
+                SendFeedbackInvitationJob::dispatch($appointment->id);
             }
 
             ActivityLogger::record($request->user('sanctum'), 'sale.closed', [

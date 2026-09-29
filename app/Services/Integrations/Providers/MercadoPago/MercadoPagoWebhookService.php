@@ -2,6 +2,7 @@
 
 namespace App\Services\Integrations\Providers\MercadoPago;
 
+use App\Jobs\SendFeedbackInvitationJob;
 use App\Models\Payment;
 use App\Models\StockMovement;
 use App\Services\LoyaltyService;
@@ -125,6 +126,7 @@ class MercadoPagoWebhookService
                     $sale->appointment->update(['status' => 'concluido']);
                     if ($previousStatus !== 'concluido') {
                         app(LoyaltyService::class)->awardForAppointment($sale->appointment);
+                        SendFeedbackInvitationJob::dispatch($sale->appointment->id);
                     }
                 }
             });
