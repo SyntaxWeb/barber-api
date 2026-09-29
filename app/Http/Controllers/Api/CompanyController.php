@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\CompanyPhoto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class CompanyController extends Controller
@@ -128,7 +129,8 @@ class CompanyController extends Controller
             $updateData['client_theme'] = $data['client_theme'];
         }
 
-        $company->update($updateData);
+        $companyColumns = array_flip(Schema::getColumnListing($company->getTable()));
+        $company->update(array_intersect_key($updateData, $companyColumns));
 
         $galleryRemove = collect($request->input('gallery_remove', []))
             ->filter(fn ($path) => is_string($path) && $path !== '')
