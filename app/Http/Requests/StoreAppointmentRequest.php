@@ -13,10 +13,12 @@ class StoreAppointmentRequest extends FormRequest
 
     public function rules(): array
     {
+        $canUsePastDates = in_array($this->user("sanctum")?->role, ["provider", "admin"], true);
+
         return [
             'cliente' => 'sometimes|required|string|max:255',
             'telefone' => 'sometimes|required|string|max:30',
-            'data' => 'required|date|after_or_equal:today',
+            "data" => $canUsePastDates ? "required|date" : "required|date|after_or_equal:today",
             'horario' => 'required|string',
             'service_id' => 'nullable|exists:services,id',
             'service_ids' => 'nullable|array|min:1',

@@ -16,6 +16,7 @@ use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
 use App\Services\ActivityLogger;
 use App\Services\LoyaltyService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
@@ -60,11 +61,13 @@ class AppointmentController extends Controller
 
     public function store(Request $request, AvailabilityService $availability)
     {
+        $user = $request->user("sanctum");
+        $isProvider = $user?->role === "provider";
 
         $validator = Validator::make($request->all(), [
             'cliente'       => 'sometimes|required|string|max:255',
             'telefone'      => 'sometimes|required|string|max:30',
-            'data'          => 'required|date|after_or_equal:today',
+            "data"          => $isProvider ? "required|date" : "required|date|after_or_equal:today",
             'horario'       => 'required|string',
             'service_id'    => 'nullable|exists:services,id',
             'service_ids'   => 'nullable|array|min:1',
@@ -84,8 +87,6 @@ class AppointmentController extends Controller
         }
 
         $data = $validator->validated();
-
-        $user = $request->user('sanctum');
 
         if (!in_array($user->role, ['provider', 'client'])) {
             return response()->json(['message' => 'Usuário não autorizado a criar agendamentos.'], 403);
@@ -118,7 +119,11 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
         }
 
+        $appointmentStartsAt = Carbon::parse(sprintf("%s %s", $data["data"], $data["horario"]));
+        $isRetroactiveProviderEntry = $isProvider && $appointmentStartsAt->isPast();
+
         if (
+            !$isRetroactiveProviderEntry &&
             !in_array(
                 $data['horario'],
                 $availability->horariosDisponiveis($data['data'], $companyId, $serviceIds),
