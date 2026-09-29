@@ -12,6 +12,7 @@ use App\Services\LoyaltyService;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ClientController extends Controller
@@ -23,7 +24,11 @@ class ClientController extends Controller
 
         $clients = User::query()
             ->where('role', 'client')
-            ->whereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $provider->company_id))
+            ->when(
+                Schema::hasTable('company_client'),
+                fn ($query) => $query->whereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $provider->company_id)),
+                fn ($query) => $query->where('company_id', $provider->company_id)
+            )
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery
@@ -43,7 +48,11 @@ class ClientController extends Controller
     {
         $provider = $request->user();
 
-        if ($client->role !== 'client' || !$client->clientCompanies()->where('companies.id', $provider->company_id)->exists()) {
+        $belongsToCompany = Schema::hasTable('company_client')
+            ? $client->clientCompanies()->where('companies.id', $provider->company_id)->exists()
+            : (int) $client->company_id === (int) $provider->company_id;
+
+        if ($client->role !== 'client' || !$belongsToCompany) {
             abort(403, 'Cliente não pertence à sua empresa.');
         }
 
@@ -151,7 +160,11 @@ class ClientController extends Controller
             ]);
         }
 
-        $client->clientCompanies()->syncWithoutDetaching([$provider->company_id]);
+        if (Schema::hasTable('company_client')) {
+            $client->clientCompanies()->syncWithoutDetaching([$provider->company_id]);
+        } elseif (!$client->company_id) {
+            $client->forceFill(['company_id' => $provider->company_id])->save();
+        }
 
         return new ClientResource($client);
     }

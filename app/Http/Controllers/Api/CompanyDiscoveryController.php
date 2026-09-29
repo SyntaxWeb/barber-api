@@ -9,6 +9,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CompanyDiscoveryController extends Controller
 {
@@ -28,6 +29,12 @@ class CompanyDiscoveryController extends Controller
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:24'],
         ]);
+
+        $hasDiscoveryEnabled = Schema::hasColumn('companies', 'discovery_enabled');
+        $hasSubscriptionStatus = Schema::hasColumn('companies', 'subscription_status');
+        $hasLocationColumns = collect(['city', 'neighborhood', 'address_line', 'postal_code'])->every(
+            fn (string $column) => Schema::hasColumn('companies', $column)
+        );
 
         $validFeedback = fn ($query) => $query
             ->whereColumn('appointments.company_id', 'companies.id')
@@ -50,23 +57,27 @@ class CompanyDiscoveryController extends Controller
                     ->selectRaw('AVG((service_rating + professional_rating + scheduling_rating) / 3.0)')),
                 'public_rating'
             )
-            ->where('discovery_enabled', true)
-            ->where('subscription_status', 'ativo')
+            ->when($hasDiscoveryEnabled, fn ($builder) => $builder->where('discovery_enabled', true))
+            ->when($hasSubscriptionStatus, fn ($builder) => $builder->where('subscription_status', 'ativo'))
             ->whereHas('services', fn ($builder) => $builder->where('ativo', true))
             ->with(['services' => fn ($builder) => $builder->where('ativo', true)->orderBy('preco')]);
 
-        $query->when($data['q'] ?? null, function ($builder, $term) {
-            $builder->where(function ($nested) use ($term) {
+        $query->when($data['q'] ?? null, function ($builder, $term) use ($hasLocationColumns) {
+            $builder->where(function ($nested) use ($term, $hasLocationColumns) {
                 $nested->where('nome', 'like', "%{$term}%")
-                    ->orWhere('city', 'like', "%{$term}%")
-                    ->orWhere('neighborhood', 'like', "%{$term}%")
                     ->orWhereHas('services', fn ($services) => $services
                         ->where('ativo', true)
                         ->where('nome', 'like', "%{$term}%"));
+
+                if ($hasLocationColumns) {
+                    $nested->orWhere('city', 'like', "%{$term}%")
+                        ->orWhere('neighborhood', 'like', "%{$term}%");
+                }
             });
         });
 
-        $query->when($data['location'] ?? null, function ($builder, $location) {
+        $query->when(($data['location'] ?? null) && $hasLocationColumns, function ($builder) use ($data) {
+            $location = $data['location'];
             $builder->where(function ($nested) use ($location) {
                 $nested->where('city', 'like', "%{$location}%")
                     ->orWhere('neighborhood', 'like', "%{$location}%")
