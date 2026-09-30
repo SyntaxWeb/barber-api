@@ -16,7 +16,6 @@ use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
 use App\Services\ActivityLogger;
 use App\Services\LoyaltyService;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Validator;
@@ -68,7 +67,7 @@ class AppointmentController extends Controller
             'cliente'       => 'sometimes|required|string|max:255',
             'telefone'      => 'sometimes|required|string|max:30',
             "data"          => $isProvider ? "required|date" : "required|date|after_or_equal:today",
-            'horario'       => 'required|string',
+            'horario'       => 'required|date_format:H:i',
             'service_id'    => 'nullable|exists:services,id',
             'service_ids'   => 'nullable|array|min:1',
             'service_ids.*' => 'integer|exists:services,id',
@@ -119,11 +118,8 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Serviço inativo ou não encontrado.'], 422);
         }
 
-        $appointmentStartsAt = Carbon::parse(sprintf("%s %s", $data["data"], $data["horario"]));
-        $isRetroactiveProviderEntry = $isProvider && $appointmentStartsAt->isPast();
-
         if (
-            !$isRetroactiveProviderEntry &&
+            !$isProvider &&
             !in_array(
                 $data['horario'],
                 $availability->horariosDisponiveis($data['data'], $companyId, $serviceIds),
@@ -250,7 +246,10 @@ class AppointmentController extends Controller
             && $appointment->horario === $data['horario']
             && collect($appointment->services()->pluck('services.id')->all())->map(fn ($id) => (int) $id)->values()->all() === $serviceIds;
 
+        $canScheduleAnyTime = $request->user('sanctum')?->role === 'provider';
+
         if (
+            !$canScheduleAnyTime &&
             !$isSameSlot &&
             !in_array(
                 $data['horario'],

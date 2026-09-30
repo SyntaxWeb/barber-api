@@ -19,7 +19,7 @@ class StoreAppointmentRequest extends FormRequest
             'cliente' => 'sometimes|required|string|max:255',
             'telefone' => 'sometimes|required|string|max:30',
             "data" => $canUsePastDates ? "required|date" : "required|date|after_or_equal:today",
-            'horario' => 'required|string',
+            'horario' => 'required|date_format:H:i',
             'service_id' => 'nullable|exists:services,id',
             'service_ids' => 'nullable|array|min:1',
             'service_ids.*' => 'integer|exists:services,id',

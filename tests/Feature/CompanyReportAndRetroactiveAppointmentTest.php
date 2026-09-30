@@ -38,6 +38,26 @@ class CompanyReportAndRetroactiveAppointmentTest extends TestCase
         ]);
     }
 
+    public function test_provider_can_register_an_appointment_at_any_minute(): void
+    {
+        [$company, $provider, $service] = $this->fixture();
+        Sanctum::actingAs($provider, ['provider']);
+
+        $this->postJson('/api/appointments', [
+            'cliente' => 'Cliente manual',
+            'telefone' => '11999999999',
+            'data' => now()->addDay()->toDateString(),
+            'horario' => '02:37',
+            'service_id' => $service->id,
+        ])->assertSuccessful();
+
+        $this->assertDatabaseHas('appointments', [
+            'company_id' => $company->id,
+            'cliente' => 'Cliente manual',
+            'horario' => '02:37',
+        ]);
+    }
+
     public function test_client_cannot_register_a_past_appointment(): void
     {
         [$company, , $service] = $this->fixture();
