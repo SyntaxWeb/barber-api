@@ -77,32 +77,68 @@ class CompanyDiscoveryController extends Controller
         });
 
         $query->when(($data['location'] ?? null) && $hasLocationColumns, function ($builder) use ($data) {
-            $location = $data['location'];
-            $builder->where(function ($nested) use ($location) {
-                $nested->where('city', 'like', "%{$location}%")
-                    ->orWhere('neighborhood', 'like', "%{$location}%")
-                    ->orWhere('address_line', 'like', "%{$location}%")
-                    ->orWhere('postal_code', 'like', "%{$location}%");
-            });
+            foreach (preg_split('/[,;]+/', $data['location'], -1, PREG_SPLIT_NO_EMPTY) as $part) {
+                $location = trim($part);
+                if ($location === '') continue;
+                $builder->where(function ($nested) use ($location) {
+                    $nested->where('city', 'like', "%{$location}%")
+                        ->orWhere('neighborhood', 'like', "%{$location}%")
+                        ->orWhere('address_line', 'like', "%{$location}%")
+                        ->orWhere('postal_code', 'like', "%{$location}%");
+                });
+            }
         });
 
-        $query->when($data['service'] ?? null, fn ($builder, $service) => $builder
-            ->whereHas('services', fn ($services) => $services
-                ->where('ativo', true)
-                ->where('nome', 'like', "%{$service}%")));
+        // All service filters must match the same active service.
+        $query->whereHas('services', function ($services) use ($data) {
+            $services->where('ativo', true);
+            if (!empty($data['service'])) $services->where('nome', 'like', "%{$data['service']}%");
+            if (isset($data['price_min'])) $services->where('preco', '>=', $data['price_min']);
+            if (isset($data['price_max'])) $services->where('preco', '<=', $data['price_max']);
+        });
 
-        $query->when(isset($data['price_min']), fn ($builder) => $builder
-            ->whereHas('services', fn ($services) => $services->where('ativo', true)->where('preco', '>=', $data['price_min'])));
-        $query->when(isset($data['price_max']), fn ($builder) => $builder
-            ->whereHas('services', fn ($services) => $services->where('ativo', true)->where('preco', '<=', $data['price_max'])));
-
-        $companies = $query->orderBy('nome')->limit(200)->get();
         $clientLatitude = isset($data['latitude']) ? (float) $data['latitude'] : null;
         $clientLongitude = isset($data['longitude']) ? (float) $data['longitude'] : null;
+        if ($clientLatitude !== null && $clientLongitude !== null && isset($data['radius_km'])) {
+            if (!Schema::hasColumn('companies', 'latitude') || !Schema::hasColumn('companies', 'longitude')) {
+                $query->whereRaw('1 = 0');
+            } else {
+                // Bounding box narrows the database scan; the exact radius is checked below.
+                $latDelta = (float) $data['radius_km'] / 111.0;
+                $query->whereNotNull('latitude')->whereNotNull('longitude')
+                    ->whereBetween('latitude', [max(-90, $clientLatitude - $latDelta), min(90, $clientLatitude + $latDelta)]);
+            }
+        }
+
+        $query = Company::query()->fromSub($query->toBase(), 'companies')
+            ->with(['services' => fn ($services) => $services->where('ativo', true)->orderBy('preco')]);
+        if (isset($data['rating_min'])) $query->whereRaw('public_rating >= CAST(? AS DECIMAL(10,5))', [$data['rating_min']]);
+        $hasCoordinates = $clientLatitude !== null && $clientLongitude !== null;
+        $databaseDistance = $hasCoordinates && DB::connection()->getDriverName() === 'mysql'
+            && Schema::hasColumn('companies', 'latitude') && Schema::hasColumn('companies', 'longitude');
+        if ($databaseDistance) {
+            $distanceSql = '6371 * 2 * ASIN(SQRT(LEAST(1, POW(SIN(RADIANS(latitude - ?) / 2), 2) + COS(RADIANS(?)) * COS(RADIANS(latitude)) * POW(SIN(RADIANS(longitude - ?) / 2), 2))))';
+            $bindings = [$clientLatitude, $clientLatitude, $clientLongitude];
+            $query->select('companies.*')->selectRaw("$distanceSql as search_distance", $bindings);
+            if (isset($data['radius_km'])) $query->whereRaw("$distanceSql <= ?", [...$bindings, $data['radius_km']]);
+            $query->orderByRaw('search_distance IS NULL')->orderBy('search_distance');
+        }
+        $query->orderBy('nome')->orderBy('id');
+        $page = (int) ($data['page'] ?? 1);
+        $perPage = (int) ($data['per_page'] ?? 12);
+        // Availability requires checking schedules; ordinary searches paginate in SQL.
+        $databasePage = !isset($data['available_on']) && (!$hasCoordinates || $databaseDistance)
+            ? $query->paginate($perPage, ['*'], 'page', $page) : null;
+        $companies = $databasePage ? $databasePage->getCollection() : $query->get();
 
         $items = $companies->map(function (Company $company) use ($availability, $data, $clientLatitude, $clientLongitude) {
             $distance = $this->distanceKm($clientLatitude, $clientLongitude, $company->latitude, $company->longitude);
-            $referenceService = $this->referenceService($company, $data['service'] ?? null);
+            $company->setRelation('services', $company->services->filter(fn ($service) =>
+                (!isset($data['price_min']) || $service->preco >= $data['price_min']) &&
+                (!isset($data['price_max']) || $service->preco <= $data['price_max']) &&
+                (empty($data['service']) || str_contains(\Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii($service->nome)), \Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii($data['service']))))
+            )->values());
+            $referenceService = $this->referenceService($company, null);
 
             return [
                 'id' => $company->id,
@@ -148,7 +184,7 @@ class CompanyDiscoveryController extends Controller
 
         $page = (int) ($data['page'] ?? 1);
         $perPage = (int) ($data['per_page'] ?? 12);
-        $pageItems = $items->forPage($page, $perPage)->map(function ($item) use ($availability, $companies, $data) {
+        $pageItems = ($databasePage ? $items : $items->forPage($page, $perPage))->map(function ($item) use ($availability, $companies, $data) {
             if ($item['next_availability'] === null && !isset($data['available_on'])) {
                 $company = $companies->firstWhere('id', $item['id']);
                 $item['next_availability'] = $company && $item['_reference_service_id']
@@ -161,7 +197,7 @@ class CompanyDiscoveryController extends Controller
 
         $paginator = new LengthAwarePaginator(
             $pageItems,
-            $items->count(),
+            $databasePage ? $databasePage->total() : $items->count(),
             $perPage,
             $page,
             ['path' => $request->url(), 'query' => $request->query()]
@@ -237,7 +273,7 @@ class CompanyDiscoveryController extends Controller
         $a = sin($latDelta / 2) ** 2
             + cos(deg2rad($fromLat)) * cos(deg2rad((float) $toLat)) * sin($lngDelta / 2) ** 2;
 
-        return round($earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a)), 1);
+        return round($earthRadius * 2 * atan2(sqrt($a), sqrt(max(0, 1 - $a))), 1);
     }
 
     private function address(Company $company): ?string

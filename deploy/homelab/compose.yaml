@@ -1,0 +1,103 @@
+name: ${COMPOSE_PROJECT_NAME:-syntax-evolution}
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${EVOLUTION_BIND_IP:-127.0.0.1}:${EVOLUTION_LOCAL_PORT:-8085}:8080"
+    environment:
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:?Configure EVOLUTION_PUBLIC_URL}
+      SERVER_PORT: 8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?Generate EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD:?Generate EVOLUTION_DB_PASSWORD}@postgres:5432/evolution?schema=public
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: syntax-evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      LOG_LEVEL: ERROR,WARN
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - instances:/evolution/instances
+    logging: *logging
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_DB: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:?Generate EVOLUTION_DB_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  https:
+    image: caddy:2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    depends_on: [evolution]
+    ports: ["80:80", "443:443"]
+    environment:
+      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN:-evolution.seudominio.com.br}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *logging
+
+  tunnel:
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:latest}
+    profiles: [tunnel]
+    restart: unless-stopped
+    depends_on: [evolution]
+    command: [tunnel, --no-autoupdate, run]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    logging: *logging
+
+volumes:
+  instances:
+  postgres:
+  redis:
+  caddy_data:
+  caddy_config:

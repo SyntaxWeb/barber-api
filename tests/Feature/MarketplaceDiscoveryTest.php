@@ -127,6 +127,99 @@ class MarketplaceDiscoveryTest extends TestCase
         $this->assertDatabaseCount('appointment_feedback', 1);
     }
 
+    public function test_discovery_combines_city_and_neighborhood(): void
+    {
+        $this->companyFixture('Centro Curitiba', 'centro-curitiba', ['city' => 'Curitiba', 'neighborhood' => 'Centro']);
+        $this->companyFixture('Centro Londrina', 'centro-londrina', ['city' => 'Londrina', 'neighborhood' => 'Centro']);
+        $this->getJson('/api/discover/companies?location=Centro%2C%20Curitiba')
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.slug', 'centro-curitiba');
+    }
+
+    public function test_service_and_price_must_match_the_same_service(): void
+    {
+        [$company] = $this->companyFixture('Servicos', 'servicos');
+        Service::create(['company_id' => $company->id, 'nome' => 'Barba', 'preco' => 100, 'duracao_minutos' => 30, 'ativo' => true]);
+        $this->getJson('/api/discover/companies?service=Barba&price_max=60')
+            ->assertOk()->assertJsonPath('total', 0);
+        $this->getJson('/api/discover/companies?service=Barba&price_max=120')
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonCount(1, 'data.0.services')
+            ->assertJsonPath('data.0.services.0.nome', 'Barba');
+    }
+
+    public function test_radius_is_applied_before_the_old_two_hundred_company_limit(): void
+    {
+        for ($i = 0; $i < 201; $i++) {
+            $this->companyFixture(sprintf('A distant %03d', $i), "distant-$i", ['latitude' => 0, 'longitude' => 0]);
+        }
+        $this->companyFixture('Z nearby', 'nearby', ['latitude' => -25.4284, 'longitude' => -49.2733]);
+        $this->companyFixture('No coordinates', 'no-coordinates');
+        $this->getJson('/api/discover/companies?latitude=-25.4284&longitude=-49.2733&radius_km=5')
+            ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.slug', 'nearby')
+            ->assertJsonPath('data.0.distance_km', 0);
+    }
+
+    public function test_discovery_paginates_all_results_without_truncation(): void
+    {
+        for ($i = 0; $i < 25; $i++) $this->companyFixture(sprintf('Company %02d', $i), "company-$i");
+        $this->getJson('/api/discover/companies?page=3&per_page=12')
+            ->assertOk()->assertJsonPath('total', 25)->assertJsonPath('last_page', 3)->assertJsonCount(1, 'data');
+    }
+
+    public function test_clients_can_be_found_beyond_the_first_fifty_and_search_is_normalized(): void
+    {
+        [$company] = $this->companyFixture('Clientes', 'clientes');
+        $provider = User::factory()->create(['role' => 'provider', 'company_id' => $company->id]);
+        $target = User::factory()->create(['name' => 'João Antigo', 'role' => 'client', 'company_id' => $company->id, 'telefone' => '+55 (41) 99999-1234']);
+        $target->clientCompanies()->attach($company->id);
+        for ($i = 0; $i < 55; $i++) {
+            $client = User::factory()->create(['role' => 'client', 'company_id' => $company->id]);
+            $client->clientCompanies()->attach($company->id);
+        }
+        $other = User::factory()->create(['name' => 'João Outra Empresa', 'role' => 'client']);
+        Sanctum::actingAs($provider, ['provider']);
+        $this->getJson('/api/clients?page=1&per_page=20')->assertOk()
+            ->assertJsonPath('meta.total', 56)->assertJsonPath('meta.last_page', 3)->assertJsonCount(20, 'data');
+        $this->getJson('/api/clients?search=joao&page=1')->assertOk()
+            ->assertJsonPath('meta.total', 1)->assertJsonPath('data.0.id', $target->id);
+        $this->getJson('/api/clients?search=41999991234&page=1')->assertOk()->assertJsonPath('meta.total', 1);
+        $this->getJson('/api/clients?search=joao')->assertOk()->assertJsonCount(1, 'data');
+    }
+
+    public function test_duplicate_phone_is_rejected_only_within_the_same_company(): void
+    {
+        [$company] = $this->companyFixture('Clientes', 'clientes');
+        $provider = User::factory()->create(['role' => 'provider', 'company_id' => $company->id]);
+        $client = User::factory()->create(['name' => 'Cliente Existente', 'role' => 'client', 'company_id' => $company->id, 'telefone' => '+55 (41) 99999-1234']);
+        $client->clientCompanies()->attach($company->id);
+        Sanctum::actingAs($provider, ['provider']);
+        $this->postJson('/api/clients', ['nome' => 'Duplicado', 'telefone' => '41999991234'])->assertStatus(409);
+        $this->postJson('/api/clients', ['nome' => 'Telefone inválido', 'telefone' => '123'])->assertStatus(422);
+        $this->assertDatabaseMissing('users', ['name' => 'Duplicado']);
+        $this->postJson('/api/clients', ['nome' => 'Outra pessoa', 'telefone' => '41999991234', 'allow_duplicate_phone' => true])->assertSuccessful();
+        [$otherCompany] = $this->companyFixture('Outra empresa', 'outra-empresa');
+        $otherClient = User::factory()->create(['role' => 'client', 'company_id' => $otherCompany->id, 'telefone' => '41988881234']);
+        $otherClient->clientCompanies()->attach($otherCompany->id);
+        $this->postJson('/api/clients', ['nome' => 'Cliente novo', 'telefone' => '41988881234'])->assertSuccessful();
+    }
+
+    public function test_provider_schedule_links_selected_client_and_rejects_other_company_client(): void
+    {
+        [$company, $service] = $this->companyFixture('Agenda clientes', 'agenda-clientes');
+        $provider = User::factory()->create(['role' => 'provider', 'company_id' => $company->id]);
+        $client = User::factory()->create(['role' => 'client', 'telefone' => '41999991234']);
+        $client->clientCompanies()->attach($company->id);
+        $other = User::factory()->create(['role' => 'client']);
+        Sanctum::actingAs($provider, ['provider']);
+        $payload = ['client_id' => $client->id, 'cliente' => $client->name, 'telefone' => $client->telefone,
+            'data' => now()->addDay()->toDateString(), 'horario' => '10:37', 'service_id' => $service->id];
+        $this->postJson('/api/appointments', $payload)->assertSuccessful();
+        $this->assertDatabaseHas('appointments', ['company_id' => $company->id, 'user_id' => $client->id, 'horario' => '10:37']);
+        $payload['client_id'] = $other->id;
+        $payload['horario'] = '11:37';
+        $this->postJson('/api/appointments', $payload)->assertStatus(422);
+        $this->assertDatabaseMissing('appointments', ['user_id' => $other->id]);
+    }
+
     private function companyFixture(string $name, string $slug, array $attributes = []): array
     {
         $company = Company::create(array_merge([

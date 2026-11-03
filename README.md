@@ -1,3 +1,7 @@
+# Implantação do SyntaxAtendimento
+
+Para **Hostinger compartilhada com Evolution no homelab**, veja [o guia de implantação](docs/HOSTINGER_HOMELAB.md). Os arquivos dedicados ficam em `deploy/hostinger` e `deploy/homelab`; eles não substituem o Compose local.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">

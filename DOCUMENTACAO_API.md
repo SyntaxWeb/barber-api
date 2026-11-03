@@ -392,3 +392,18 @@ Endpoint admin: `/api/admin/logs` com paginacao.
 ## 11. Colecoes e utilitarios
 - Postman: `Barber API.postman_collection.json`
 
+
+
+### Busca e agendamento de clientes
+
+- `GET /api/clients?search=joao&page=1&per_page=20`: pesquisa na base da empresa; retorna `data`, `links` e `meta` com o total e páginas. Sem `page`, preserva o contrato do autocomplete (até 50 sugestões).
+- A busca normaliza acentos em nomes e pontuação de telefones.
+- `POST /api/clients`: telefone com DDD (10 a 15 dígitos); possível duplicidade na mesma empresa retorna HTTP 409. Somente após conferência, `allow_duplicate_phone: true` permite cadastrar outra pessoa com o mesmo telefone.
+- `POST /api/appointments`: o prestador pode enviar `client_id` para vincular o atendimento ao cliente selecionado. A API exige que esse cliente pertença à empresa. Clientes autenticados continuam agendando para a própria conta.
+
+### Descoberta pública
+
+- `GET /api/discover/companies`: `location=Centro, Curitiba` combina os termos do endereço; serviço e limites de preço devem corresponder ao mesmo serviço ativo.
+- No MySQL, filtros de distância e avaliação e ordenação por proximidade precedem a paginação no banco. A consulta não limita mais o universo às primeiras 200 empresas.
+- O filtro `available_on` verifica as agendas antes de paginar os resultados.
+- Empresas sem coordenadas continuam na busca geral e são excluídas quando um raio é solicitado.

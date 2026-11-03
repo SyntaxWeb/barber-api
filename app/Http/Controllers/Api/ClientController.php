@@ -20,27 +20,38 @@ class ClientController extends Controller
     public function index(Request $request)
     {
         $provider = $request->user();
-        $search = $request->string('search')->toString();
+        $request->validate(['search' => 'nullable|string|max:120', 'page' => 'nullable|integer|min:1', 'per_page' => 'nullable|integer|min:1|max:50']);
+        $search = trim($request->string('search')->toString());
 
-        $clients = User::query()
+        $query = User::query()
             ->where('role', 'client')
             ->when(
                 Schema::hasTable('company_client'),
                 fn ($query) => $query->whereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $provider->company_id)),
                 fn ($query) => $query->where('company_id', $provider->company_id)
             )
-            ->when($search, function ($query) use ($search) {
-                $query->where(function ($subQuery) use ($search) {
-                    $subQuery
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('telefone', 'like', "%{$search}%");
+            ->when($search !== '', function ($query) use ($search) {
+                $term = Str::lower(Str::ascii($search));
+                $name = 'LOWER(name)';
+                foreach (['á'=>'a', 'à'=>'a', 'ã'=>'a', 'â'=>'a', 'é'=>'e', 'ê'=>'e', 'í'=>'i', 'ó'=>'o', 'ô'=>'o', 'õ'=>'o', 'ú'=>'u', 'ü'=>'u', 'ç'=>'c', 'Á'=>'a', 'À'=>'a', 'Â'=>'a', 'Ã'=>'a', 'É'=>'e', 'Ê'=>'e', 'Í'=>'i', 'Ó'=>'o', 'Ô'=>'o', 'Õ'=>'o', 'Ú'=>'u', 'Ü'=>'u', 'Ç'=>'c'] as $accent => $plain) {
+                    $name = "REPLACE($name, '$accent', '$plain')";
+                }
+                $digits = preg_replace('/\D/', '', $search);
+                $phone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '(', ''), ')', ''), '-', ''), '+', ''), '.', '')";
+                $query->where(function ($nested) use ($name, $term, $digits, $phone) {
+                    $nested->whereRaw("$name LIKE ?", ["%$term%"])
+                        ->orWhere('email', 'like', "%$term%");
+                    if ($digits !== '' && !preg_match('/[a-zA-Z]/', $term)) {
+                        $nested->orWhereRaw("$phone LIKE ?", ["%$digits%"]);
+                    }
                 });
             })
-            ->orderByDesc('created_at')
-            ->limit(50)
-            ->get();
+            ->orderBy('name')->orderBy('id');
 
+        // Preserve the array contract used by appointment autocomplete.
+        $clients = $request->has('page')
+            ? $query->paginate((int) $request->input('per_page', 20))
+            : $query->limit(50)->get();
         return ClientResource::collection($clients);
     }
 
@@ -138,7 +149,26 @@ class ClientController extends Controller
             'email' => ['nullable', 'email', 'max:255'],
             'telefone' => ['required', 'string', 'max:40'],
             'observacoes' => ['nullable', 'string'],
+            'allow_duplicate_phone' => ['sometimes', 'boolean'],
         ]);
+
+        $digits = preg_replace('/\D/', '', $data['telefone']);
+        if (strlen($digits) < 10 || strlen($digits) > 15) {
+            return response()->json(['message' => 'Informe um telefone válido com DDD.'], 422);
+        }
+        $localDigits = strlen($digits) > 11 && str_starts_with($digits, '55') ? substr($digits, 2) : $digits;
+        $phone = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefone, ' ', ''), '(', ''), ')', ''), '-', ''), '+', ''), '.', '')";
+        $existing = User::where('role', 'client')
+            ->where(function ($query) use ($provider) {
+                $query->where('company_id', $provider->company_id);
+                if (Schema::hasTable('company_client')) {
+                    $query->orWhereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $provider->company_id));
+                }
+            })
+            ->whereRaw("$phone IN (?, ?)", [$localDigits, '55'.$localDigits])->first();
+        if ($existing && !($data['allow_duplicate_phone'] ?? false)) {
+            return response()->json(['message' => "Já existe um cliente com este telefone: {$existing->name}. Busque pelo telefone para abrir o cadastro existente."], 409);
+        }
 
         $client = isset($data['email'])
             ? User::where('email', $data['email'])->first()

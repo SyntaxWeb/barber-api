@@ -12,12 +12,14 @@ use App\Models\Appointment;
 use App\Models\Company;
 use App\Models\LoyaltyRedemption;
 use App\Models\Service;
+use App\Models\User;
 use App\Notifications\NewAppointmentNotification;
 use App\Services\AvailabilityService;
 use App\Services\ActivityLogger;
 use App\Services\LoyaltyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class AppointmentController extends Controller
@@ -64,6 +66,7 @@ class AppointmentController extends Controller
         $isProvider = $user?->role === "provider";
 
         $validator = Validator::make($request->all(), [
+            'client_id'     => 'nullable|integer',
             'cliente'       => 'sometimes|required|string|max:255',
             'telefone'      => 'sometimes|required|string|max:30',
             "data"          => $isProvider ? "required|date" : "required|date|after_or_equal:today",
@@ -102,6 +105,22 @@ class AppointmentController extends Controller
             return response()->json(['message' => 'Selecione uma empresa para agendar.'], 422);
         }
 
+        $appointmentUserId = $user->id;
+        if ($isProvider && !empty($data['client_id'])) {
+            $client = User::whereKey($data['client_id'])->where('role', 'client')
+                ->where(function ($query) use ($companyId) {
+                    $query->where('company_id', $companyId);
+                    if (Schema::hasTable('company_client')) {
+                        $query->orWhereHas('clientCompanies', fn ($companies) => $companies->where('companies.id', $companyId));
+                    }
+                })->first();
+            if (!$client) return response()->json(['message' => 'Selecione um cliente cadastrado nesta empresa.'], 422);
+            $appointmentUserId = $client->id;
+            $data['cliente'] = $client->name;
+            $data['telefone'] = $client->telefone;
+        }
+        unset($data['client_id']);
+
         $data['cliente'] = $data['cliente'] ?? $user->name;
         $data['telefone'] = $data['telefone'] ?? $user->telefone;
 
@@ -137,7 +156,7 @@ class AppointmentController extends Controller
             $redemption = LoyaltyRedemption::with('reward')
                 ->where('id', $data['loyalty_redemption_id'])
                 ->where('company_id', $companyId)
-                ->where('user_id', $user->id)
+                ->where('user_id', $appointmentUserId)
                 ->where('status', 'pending')
                 ->first();
 
@@ -166,7 +185,7 @@ class AppointmentController extends Controller
 
             $existingAppointment->update($data + [
                 'status' => 'confirmado',
-                'user_id' => $user->id,
+                'user_id' => $appointmentUserId,
             ]);
 
             if ($redemption) {
@@ -176,6 +195,7 @@ class AppointmentController extends Controller
                 ]);
             }
 
+            $existingAppointment->services()->sync($serviceIds);
             $existingAppointment->load('service', 'company', 'company.users');
             $this->notifyCompanyUsers($existingAppointment);
             ActivityLogger::record($user, 'appointment.reactivated', [
@@ -184,13 +204,12 @@ class AppointmentController extends Controller
                 'horario' => $existingAppointment->horario,
                 'service_id' => $existingAppointment->service_id,
             ], $request);
-            $existingAppointment->services()->sync($serviceIds);
             return new AppointmentResource($existingAppointment->load('service', 'services', 'company', 'feedback', 'loyaltyRedemption.reward', 'sale'));
         }
 
         $appointment = Appointment::create($data + [
             'status' => 'confirmado',
-            'user_id' => $user->id,
+            'user_id' => $appointmentUserId,
             'company_id' => $companyId,
         ]);
         $appointment->services()->sync($serviceIds);

@@ -56,5 +56,72 @@ services:
       retries: 20
       start_period: 20s
 
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    profiles: [whatsapp]
+    restart: unless-stopped
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+      evolution-redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8085:8080"
+    environment:
+      SERVER_URL: http://evolution:8080
+      SERVER_PORT: 8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:${EVOLUTION_DB_PASSWORD:-}@evolution-postgres:5432/evolution?schema=public
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "false"
+      DATABASE_SAVE_DATA_CHATS: "false"
+      DATABASE_SAVE_DATA_HISTORIC: "false"
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://evolution-redis:6379/0
+      CACHE_REDIS_PREFIX_KEY: syntax-evolution
+      CACHE_REDIS_SAVE_INSTANCES: "false"
+      CACHE_LOCAL_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+      LOG_LEVEL: ERROR,WARN
+      WEBHOOK_GLOBAL_ENABLED: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  evolution-postgres:
+    image: postgres:15-alpine
+    profiles: [whatsapp]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_DB: evolution
+      POSTGRES_PASSWORD: ${EVOLUTION_DB_PASSWORD:-}
+    volumes:
+      - evolution_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U evolution -d evolution"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  evolution-redis:
+    image: redis:7-alpine
+    profiles: [whatsapp]
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - evolution_redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   barber_db_data:
+  evolution_instances:
+  evolution_postgres:
+  evolution_redis:

@@ -45,7 +45,17 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
     ],
 
+    'evolution' => [
+        'base_url' => env('EVOLUTION_API_URL', 'http://evolution:8080'),
+        'api_key' => env('EVOLUTION_API_KEY'),
+        'webhook_secret' => env('EVOLUTION_WEBHOOK_SECRET'),
+        'webhook_base_url' => env('EVOLUTION_WEBHOOK_BASE_URL'),
+        'send_timeout' => env('EVOLUTION_SEND_TIMEOUT', 45),
+    ],
+
     'whatsapp' => [
+        'provider' => env('WHATSAPP_PROVIDER', 'evolution'),
+        'country_code' => env('WHATSAPP_COUNTRY_CODE', '55'),
         'base_url' => env('WPPCONNECT_URL', 'http://wppconnect:21465'),
         'secret' => env('WPPCONNECT_SECRET'),
         'webhook' => env('WPPCONNECT_WEBHOOK'),

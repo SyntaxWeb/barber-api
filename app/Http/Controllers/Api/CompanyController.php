@@ -92,6 +92,14 @@ class CompanyController extends Controller
         }
 
         $data = $validator->validated();
+        if ($request->boolean('notify_via_whatsapp') && blank($data['notify_whatsapp'] ?? $company->notify_whatsapp)) {
+            return response()->json(['message' => 'Informe um número de WhatsApp para receber os alertas.'], 422);
+        }
+        if (filled($data['notify_whatsapp'] ?? null)) {
+            try { $data['notify_whatsapp'] = \App\Services\Whatsapp\WhatsappPhone::normalize($data['notify_whatsapp']); }
+            catch (\InvalidArgumentException $exception) { return response()->json(['message' => $exception->getMessage()], 422); }
+        }
+
 
         if ($request->hasFile('icone')) {
             if ($company->icon_path) {

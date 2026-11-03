@@ -41,6 +41,8 @@ Route::get('/services', [ServiceController::class, 'index'])->middleware('thrott
 Route::get('/availability', AvailabilityController::class)->middleware('throttle:public-client-read');
 Route::get('/companies/{company:slug}', [CompanyController::class, 'publicShow'])->middleware('throttle:public-company-read');
 Route::get('/companies/{company:slug}/feedback-summary', [CompanyController::class, 'feedbackSummary'])->middleware('throttle:public-company-read');
+Route::post('/webhooks/whatsapp/evolution', \App\Http\Controllers\Api\EvolutionWebhookController::class)->middleware('throttle:300,1');
+
 Route::get('/discover/companies', [CompanyDiscoveryController::class, 'index'])->middleware('throttle:public-company-read');
 Route::get('/feedback/form/{token}', [PublicFeedbackController::class, 'show'])->middleware('throttle:public-client-read');
 Route::post('/feedback/form/{token}', [PublicFeedbackController::class, 'submit'])->middleware('throttle:public-feedback-submit');
@@ -134,6 +136,8 @@ Route::middleware(['cors' ,'auth:sanctum', 'ability:provider,admin', 'subscripti
 
     Route::post('/company/telegram/link', [TelegramSetupController::class, 'createLink']);
     Route::post('/company/telegram/link/verify', [TelegramSetupController::class, 'verifyLink']);
+    Route::get('/company/whatsapp/notifications', [WhatsappSetupController::class, 'notifications']);
+    Route::post('/company/whatsapp/test', [WhatsappSetupController::class, 'test'])->middleware('throttle:3,1');
     Route::get('/company/whatsapp/session', [WhatsappSetupController::class, 'status']);
     Route::post('/company/whatsapp/session', [WhatsappSetupController::class, 'start']);
     Route::delete('/company/whatsapp/session', [WhatsappSetupController::class, 'logout']);

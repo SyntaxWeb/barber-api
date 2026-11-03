@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Company;
 use App\Models\NotificationLog;
 use App\Services\WhatsappService;
+use App\Services\Whatsapp\WhatsappDeliveryService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,13 +25,13 @@ class SendAppointmentAlertJob implements ShouldQueue
 
     public function handle(): void
     {
-        $appointment = Appointment::with(['company', 'service', 'user'])->find($this->appointmentId);
+        $appointment = Appointment::with(['company', 'service', 'services', 'user'])->find($this->appointmentId);
         if (!$appointment || !$appointment->company) {
             return;
         }
 
         $company = $appointment->company;
-        $serviceName = optional($appointment->service)->nome ?? 'Serviço';
+        $serviceName = $appointment->services->pluck('nome')->implode(', ') ?: (optional($appointment->service)->nome ?? 'Serviço');
         $dateText = optional($appointment->data)->format('d/m/Y') ?: (string) $appointment->data;
         $priceText = $appointment->preco !== null
             ? 'R$ ' . number_format((float) $appointment->preco, 2, ',', '.')
@@ -160,15 +161,15 @@ class SendAppointmentAlertJob implements ShouldQueue
         }
 
         try {
-            $this->whatsappService()->sendMessage($company, $company->notify_whatsapp, $message);
-            $this->logNotification($company, 'whatsapp', $company->notify_whatsapp, $message);
+            app(WhatsappDeliveryService::class)->send($company, $company->notify_whatsapp, $message, [
+                'appointment_id' => $this->appointmentId, 'action' => $this->action, 'audience' => 'provider',
+            ]);
         } catch (Throwable $exception) {
             Log::error('Falha ao enviar notificação para o WhatsApp', [
                 'company_id' => $company->id,
                 'error' => $exception->getMessage(),
             ]);
 
-            $this->logNotification($company, 'whatsapp', $company->notify_whatsapp, $message, 'failed', [], $exception->getMessage());
         }
     }
 
