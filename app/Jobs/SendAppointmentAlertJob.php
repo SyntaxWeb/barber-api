@@ -122,6 +122,27 @@ class SendAppointmentAlertJob implements ShouldQueue
 
         $this->notifyTelegram($company, $company->notify_telegram, $message, (bool) $company->notify_via_telegram);
         $this->notifyWhatsapp($company, $message);
+
+        // Client confirmations are independent of the company's own alert recipient.
+        $clientPhone = trim((string) $appointment->telefone);
+        if ($clientPhone === '' && $appointment->user?->role === 'client') {
+            $clientPhone = trim((string) $appointment->user->telefone);
+        }
+        if ($this->action === 'created' && $appointment->status === 'confirmado' && $clientPhone !== '') {
+            $confirmation = sprintf(
+                "✅ *Agendamento confirmado!*\n\nOlá, %s!\nSeu horário na %s está confirmado.\n\n💈 *Serviço:* %s\n📅 *Data:* %s\n⏰ *Horário:* %s\n💲 *Valor:* %s\n\nEsperamos por você!",
+                $appointment->cliente, $companyText, $serviceName, $dateText, $appointment->horario, $priceText
+            );
+            try {
+                app(WhatsappDeliveryService::class)->send($company, $clientPhone, $confirmation, [
+                    'appointment_id' => $this->appointmentId, 'action' => $this->action, 'audience' => 'client',
+                ]);
+            } catch (Throwable $exception) {
+                Log::warning('Falha ao enviar confirmação de agendamento ao cliente pelo WhatsApp.', [
+                    'company_id' => $company->id, 'appointment_id' => $appointment->id,
+                ]);
+            }
+        }
     }
 
     protected function notifyTelegram(Company $company, ?string $companyChatId, string $message, bool $enabled): void

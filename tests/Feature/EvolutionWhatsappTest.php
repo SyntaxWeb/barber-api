@@ -176,14 +176,47 @@ class EvolutionWhatsappTest extends TestCase
         $this->assertStringNotContainsString('never-echo-this-secret', $log->error);
     }
 
-    public function test_disabled_alerts_do_not_send_whatsapp(): void
+    public function test_disabled_provider_alerts_still_send_client_confirmation(): void
     {
         [$company, $provider, $service] = $this->fixture();
         $company->update(['notify_via_whatsapp' => false]);
         $appointment = Appointment::create(['company_id' => $company->id, 'user_id' => $provider->id, 'service_id' => $service->id,
             'cliente' => 'Cliente', 'telefone' => '41911112222', 'data' => now()->addDay(), 'horario' => '10:37', 'preco' => 50, 'status' => 'confirmado']);
+        $this->fakeConnected();
+        (new SendAppointmentAlertJob($appointment->id))->handle();
+        $log = NotificationLog::where('channel', 'whatsapp')->sole();
+        $this->assertSame('client', $log->meta['audience']);
+        $this->assertSame('41911112222', $log->recipient);
+        $this->assertSame('accepted', $log->status);
+        $this->assertStringContainsString('Agendamento confirmado', $log->message);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/message/sendText/')
+            && $request['number'] === '5541911112222');
+    }
+
+    public function test_confirmation_is_skipped_when_client_has_no_phone(): void
+    {
+        [$company, $provider, $service] = $this->fixture();
+        $company->update(['notify_via_whatsapp' => false]);
+        $provider->update(['telefone' => '41999990000']);
+        $appointment = Appointment::create(['company_id' => $company->id, 'user_id' => $provider->id, 'service_id' => $service->id,
+            'cliente' => 'Cliente sem telefone', 'telefone' => '', 'data' => now()->addDay(), 'horario' => '10:37', 'preco' => 50, 'status' => 'confirmado']);
         (new SendAppointmentAlertJob($appointment->id))->handle();
         Http::assertNothingSent();
+        $this->assertSame(0, NotificationLog::where('channel', 'whatsapp')->count());
+    }
+
+    public function test_client_confirmation_failure_is_logged_without_failing_the_job(): void
+    {
+        [$company, $provider, $service] = $this->fixture();
+        $company->update(['notify_via_whatsapp' => false]);
+        Http::fake(['*' => Http::response([], 503)]);
+        $appointment = Appointment::create(['company_id' => $company->id, 'user_id' => $provider->id, 'service_id' => $service->id,
+            'cliente' => 'Cliente', 'telefone' => '41911112222', 'data' => now()->addDay(), 'horario' => '10:37', 'preco' => 50, 'status' => 'confirmado']);
+        (new SendAppointmentAlertJob($appointment->id))->handle();
+        $log = NotificationLog::where('channel', 'whatsapp')->sole();
+        $this->assertSame('client', $log->meta['audience']);
+        $this->assertSame('failed', $log->status);
+        $this->assertSame('confirmado', $appointment->fresh()->status);
     }
 
     public function test_webhook_rejects_invalid_secret_and_updates_only_the_own_company(): void
